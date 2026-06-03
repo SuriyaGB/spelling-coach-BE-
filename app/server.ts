@@ -33,7 +33,10 @@ import {
   pickNextWord,
 } from "./wordCatalog.js";
 import { logError, logInfo } from "./logging.js";
+import "dotenv/config";
+import Stripe from "stripe";
 
+const stripe = new Stripe(process.env.STRIPE_SECRET_KEY ?? "");
 const PORT = Number(process.env.PORT ?? 3000);
 
 function sendJson(response: import("node:http").ServerResponse, statusCode: number, body: unknown) {
@@ -342,6 +345,116 @@ export default async function handler(
       return;
     }
 
+    if (
+      request.method === "POST" &&
+      url.pathname === "/api/stripe/create-checkout-session"
+    ) {
+      const user = await authenticateRequest(request);
+      if (!user.email) {
+        sendJson(response, 400, { error: "User email is required for checkout." });
+        return;
+      }
+
+      const referer = request.headers.referer || request.headers.origin || "http://localhost:5173";
+      const cleanReferer = referer.split("?")[0].split("#")[0];
+      const successUrl = `${cleanReferer}?payment_success=true`;
+      const cancelUrl = `${cleanReferer}?payment_cancelled=true`;
+
+      if (!process.env.STRIPE_PRICE_ID) {
+        sendJson(response, 500, { error: "STRIPE_PRICE_ID is not configured on the server." });
+        return;
+      }
+
+      const session = await stripe.checkout.sessions.create({
+        payment_method_types: ["card"],
+        customer_email: user.email,
+        line_items: [
+          {
+            price: process.env.STRIPE_PRICE_ID,
+            quantity: 1,
+          },
+        ],
+        mode: "subscription",
+        success_url: successUrl,
+        cancel_url: cancelUrl,
+        client_reference_id: user.id,
+      });
+
+      sendJson(response, 200, { url: session.url });
+      return;
+    }
+
+    if (
+      request.method === "GET" &&
+      url.pathname === "/api/stripe/subscription-status"
+    ) {
+      const user = await authenticateRequest(request);
+      if (!user.email) {
+        sendJson(response, 200, { subscribed: false });
+        return;
+      }
+
+      const customers = await stripe.customers.list({
+        email: user.email,
+        limit: 1,
+      });
+
+      if (customers.data.length === 0) {
+        sendJson(response, 200, { subscribed: false });
+        return;
+      }
+
+      const subscriptions = await stripe.subscriptions.list({
+        customer: customers.data[0].id,
+        status: "active",
+        limit: 1,
+      });
+
+      if (subscriptions.data.length > 0) {
+        const sub = subscriptions.data[0] as any;
+        const periodEnd = sub.current_period_end || sub.items?.data?.[0]?.current_period_end || sub.billing_cycle_anchor;
+        sendJson(response, 200, {
+          subscribed: true,
+          currentPeriodEnd: periodEnd,
+          cancelAtPeriodEnd: sub.cancel_at_period_end,
+        });
+      } else {
+        sendJson(response, 200, { subscribed: false });
+      }
+      return;
+    }
+
+    if (
+      request.method === "POST" &&
+      url.pathname === "/api/stripe/create-portal-session"
+    ) {
+      const user = await authenticateRequest(request);
+      if (!user.email) {
+        sendJson(response, 400, { error: "User email is required." });
+        return;
+      }
+
+      const customers = await stripe.customers.list({
+        email: user.email,
+        limit: 1,
+      });
+
+      if (customers.data.length === 0) {
+        sendJson(response, 400, { error: "No active Stripe customer found." });
+        return;
+      }
+
+      const referer = request.headers.referer || request.headers.origin || "http://localhost:5173";
+      const cleanReferer = referer.split("?")[0].split("#")[0];
+
+      const portalSession = await stripe.billingPortal.sessions.create({
+        customer: customers.data[0].id,
+        return_url: cleanReferer,
+      });
+
+      sendJson(response, 200, { url: portalSession.url });
+      return;
+    }
     sendJson(response, 404, { error: "Not found." });
   } catch (error) {
     logError("Spelling coach API error:", error);
@@ -349,7 +462,7 @@ export default async function handler(
     if (isAuthError(error)) {
       const statusCode =
         error instanceof Error &&
-        error.message.startsWith("Supabase auth is not configured.")
+          error.message.startsWith("Supabase auth is not configured.")
           ? 500
           : 401;
       sendJson(response, statusCode, {
