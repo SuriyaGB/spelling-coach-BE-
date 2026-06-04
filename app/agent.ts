@@ -102,7 +102,7 @@ async function createSpellingCoachAgentInternal(
   const create_deep_agent = await getCreateDeepAgent();
 
   return create_deep_agent({
-    model,
+    model: model as any,
     tools: [],
     subagents: [],
     instructions: `${SPELLING_COACH_SYSTEM_PROMPT}

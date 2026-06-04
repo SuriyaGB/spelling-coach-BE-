@@ -59,7 +59,7 @@ export async function generatePronunciationAudio(
       model: DEFAULT_TTS_MODEL,
       voice,
       input: `Spell this word: ${word}`,
-      format: "mp3",
+      response_format: "mp3",
       instructions,
     });
 

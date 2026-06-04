@@ -1444,7 +1444,7 @@ test("builds a coaching input from app-level request data", () => {
   assert.equal(input.targetWord, "abandon");
   assert.equal(input.missSignals.isCorrect, false);
   assert.equal(input.missSignals.editDistance > 0, true);
-  assert.equal(input.wordMetadata?.definition.includes("leave"), true);
+  assert.equal(input.wordMetadata?.definition?.includes("leave"), true);
 });
 
 test("builds a public word response from generated word data", () => {
@@ -1695,26 +1695,26 @@ test("word-level precompute prompt includes curated spelling-rule guidance when 
     const input = buildWordPrecomputeInput("torsion");
     const prompt = buildWordTeachingPrecomputePrompt(input);
 
-  assert.equal(
-    prompt.includes(
-      "Use the curated spelling-rules CSV as a reference list of common spelling rules and rule labels.",
-    ),
-    true,
-  );
-  assert.equal(prompt.includes("Curated spelling-rule hints:"), true);
-  assert.equal(prompt.includes("soft_g_before_e_i_y"), true);
-  assert.equal(
-    prompt.includes(
-      "Use phonetic spelling or simple sound-by-syllable reasoning internally to check whether a sound-based rule truly matches the word.",
-    ),
-    true,
-  );
-  assert.equal(
-    prompt.includes(
-      "If you include a spelling rule label in wordTeaching.formTeaching.patterns, the summary, chunkReason, and sayAloudFocus must agree with that rule.",
-    ),
-    true,
-  );
+    assert.equal(
+      prompt.includes(
+        "Use the curated spelling-rules CSV as a reference list of common spelling rules and rule labels.",
+      ),
+      true,
+    );
+    assert.equal(prompt.includes("Curated spelling-rule hints:"), true);
+    assert.equal(prompt.includes("soft_g_before_e_i_y"), true);
+    assert.equal(
+      prompt.includes(
+        "Use phonetic spelling or simple sound-by-syllable reasoning internally to check whether a sound-based rule truly matches the word.",
+      ),
+      true,
+    );
+    assert.equal(
+      prompt.includes(
+        "If you include a spelling rule label in wordTeaching.formTeaching.patterns, the summary, chunkReason, and sayAloudFocus must agree with that rule.",
+      ),
+      true,
+    );
   } finally {
     if (originalFlag === undefined) {
       delete process.env.SPELLING_COACH_RULE_PROMPT_HINTS;

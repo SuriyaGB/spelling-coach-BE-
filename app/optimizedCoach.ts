@@ -180,7 +180,7 @@ async function invokeValidatedJson<T>(
   stagePrefix = "model",
 ): Promise<T> {
   const { runtime, invoker } = await getRuntimeInvoker(options);
-  const messages = [{ role: "user" as const, content: prompt }];
+  const messages: Array<{ role: "user" | "assistant"; content: string }> = [{ role: "user", content: prompt }];
   let lastError: unknown;
 
   for (let attempt = 0; attempt <= 1; attempt += 1) {

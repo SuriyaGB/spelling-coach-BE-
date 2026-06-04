@@ -276,9 +276,9 @@ export async function runSpellingCoachAgent(
 
   const maxValidationRetries = options.maxValidationRetries ?? 1;
   const promptStart = nowMs();
-  const messages = [
+  const messages: Array<{ role: "user" | "assistant"; content: string }> = [
     {
-      role: "user" as const,
+      role: "user",
       content: buildSpellingCoachPrompt(validatedInput),
     },
   ];
@@ -389,9 +389,9 @@ async function invokeLevelOneCoaching(
   timings: TimingEntry[],
   maxValidationRetries: number,
 ): Promise<SpellingCoachOutput> {
-  const messages = [
+  const messages: Array<{ role: "user" | "assistant"; content: string }> = [
     {
-      role: "user" as const,
+      role: "user",
       content: prompt,
     },
   ];
