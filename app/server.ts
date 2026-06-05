@@ -1,3 +1,4 @@
+import "dotenv/config";
 import "./instrument.js";
 import * as Sentry from "@sentry/node";
 
@@ -24,6 +25,7 @@ import {
   isSpellingRuleShortlistEnabled,
 } from "./referenceData.js";
 import { runSpellingCoachAgent } from "./runAgent.js";
+import { recordSpellingCoachTrace, recordImportListTrace } from "./langfuse.js";
 import {
   getCustomWordListById,
   getForeignOriginWordListByOrigin,
@@ -33,7 +35,6 @@ import {
   pickNextWord,
 } from "./wordCatalog.js";
 import { logError, logInfo } from "./logging.js";
-import "dotenv/config";
 import Stripe from "stripe";
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY ?? "");
@@ -301,23 +302,45 @@ export default async function handler(
     }
 
     if (request.method === "POST" && url.pathname === "/api/spelling-coach") {
+      const startTime = Date.now();
       const rawBody = await collectBody(request);
       const requestBody = CoachingRequestSchema.parse(JSON.parse(rawBody));
       const coachInput = buildSpellingCoachInput(requestBody);
       const result = hasWordTeachingPrecompute(coachInput)
         ? await runSplitSpellingCoachAgent(coachInput)
         : await runSpellingCoachAgent(coachInput);
+
+      try {
+        await recordSpellingCoachTrace({
+          input: coachInput,
+          output: result,
+          latencyMs: Date.now() - startTime,
+        });
+      } catch (err) {
+        console.error("[LANGFUSE] Error in recordSpellingCoachTrace:", err);
+      }
       sendJson(response, 200, result);
       return;
     }
 
     if (request.method === "POST" && url.pathname === "/api/words/import-custom") {
+      const startTime = Date.now();
       const rawBody = await collectBody(request);
       const requestBody = CustomWordImportRequestSchema.parse(JSON.parse(rawBody));
       const user = await authenticateRequest(request);
       const result = await importCustomWords(requestBody, {
         ownerUserId: user.id,
       });
+      try {
+        await recordImportListTrace({
+          user,
+          listName: requestBody.listName,
+          wordCount: requestBody.words.length,
+          latencyMs: Date.now() - startTime,
+        });
+      } catch (err) {
+        console.error("[LANGFUSE] Error in recordImportListTrace:", err);
+      }
       sendJson(response, 200, {
         list: result.list,
         importedCount: result.importedCount,

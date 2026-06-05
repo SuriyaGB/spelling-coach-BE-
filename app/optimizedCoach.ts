@@ -32,6 +32,7 @@ type SharedOptions = {
   directModel?: DirectModelLike;
   model?: string | object;
   runtime?: RuntimeMode;
+  spellingCoachInput?: SpellingCoachInput;
 };
 
 type TimingEntry = {
@@ -167,7 +168,7 @@ async function getRuntimeInvoker(
     runtime === "deep_agent"
       ? options.agent ?? (await createSpellingCoachAgent({ model: options.model }))
       : options.directModel ??
-        (await createDirectSpellingCoachModel({ model: options.model }));
+      (await createDirectSpellingCoachModel({ model: options.model }));
 
   return { runtime, invoker };
 }
@@ -189,12 +190,12 @@ async function invokeValidatedJson<T>(
       runtime === "deep_agent"
         ? await (invoker as DeepAgentLike).invoke({ messages })
         : await (invoker as DirectModelLike).invoke([
-            {
-              role: "system",
-              content: buildDirectRuntimeSystemPrompt(),
-            },
-            ...messages,
-          ]);
+          {
+            role: "system",
+            content: buildDirectRuntimeSystemPrompt(),
+          },
+          ...messages,
+        ]);
     timings?.push({
       stage: `${stagePrefix}_invoke_${attempt + 1}`,
       durationMs: nowMs() - invokeStart,
@@ -279,7 +280,7 @@ export function warmWordTeachingPrecompute(
       ? buildLevelOnePrecomputePrompt(validatedInput)
       : buildWordTeachingPrecomputePrompt(validatedInput),
     parseWordTeachingPrecompute,
-    options,
+    { ...options, spellingCoachInput: validatedInput },
     undefined,
     "precompute_model",
   )
@@ -290,9 +291,9 @@ export function warmWordTeachingPrecompute(
         validatedInput.wordMetadata?.origin,
       ))
     .catch((error) => {
-    wordTeachingCache.delete(cacheKey);
-    throw error;
-  });
+      wordTeachingCache.delete(cacheKey);
+      throw error;
+    });
 
   wordTeachingCache.set(cacheKey, promise);
   return promise;
@@ -314,7 +315,7 @@ export async function runSplitSpellingCoachAgent(
   const missOnly = await invokeValidatedJson<MissOnlyOutput>(
     buildMissOnlyPrompt(validatedInput, JSON.stringify(precomputed, null, 2)),
     parseMissOnlyOutput,
-    options,
+    { ...options, spellingCoachInput: validatedInput },
     timings,
     "miss_model",
   );
@@ -323,7 +324,7 @@ export async function runSplitSpellingCoachAgent(
   const result = parseSpellingCoachOutput({
     ...missOnly,
     ...precomputed,
-    });
+  });
   timings.push({
     stage: "merge_validation",
     durationMs: nowMs() - mergeStart,

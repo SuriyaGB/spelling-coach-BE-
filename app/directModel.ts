@@ -2,7 +2,7 @@ import { SPELLING_COACH_SYSTEM_PROMPT } from "./prompt.js";
 import { DEFAULT_MODEL_NAME, getConfiguredModelName, getOpenAITemperature } from "./modelConfig.js";
 
 export type DirectModelLike = {
-  invoke(input: unknown): Promise<unknown>;
+  invoke(input: unknown, options?: any): Promise<unknown>;
 };
 
 type ChatAnthropicCtor = typeof import("@langchain/anthropic")["ChatAnthropic"];
