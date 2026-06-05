@@ -37,7 +37,18 @@ import {
 import { logError, logInfo } from "./logging.js";
 import Stripe from "stripe";
 
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY ?? "");
+let stripeInstance: Stripe | null = null;
+function getStripe(): Stripe {
+  if (!stripeInstance) {
+    const key = process.env.STRIPE_SECRET_KEY;
+    if (!key) {
+      throw new Error("STRIPE_SECRET_KEY is not configured on the server.");
+    }
+    stripeInstance = new Stripe(key);
+  }
+  return stripeInstance;
+}
+
 const PORT = Number(process.env.PORT ?? 3000);
 
 function sendJson(response: import("node:http").ServerResponse, statusCode: number, body: unknown) {
@@ -383,11 +394,16 @@ export default async function handler(
       const successUrl = `${cleanReferer}?payment_success=true`;
       const cancelUrl = `${cleanReferer}?payment_cancelled=true`;
 
+      if (!process.env.STRIPE_SECRET_KEY) {
+        sendJson(response, 500, { error: "STRIPE_SECRET_KEY is not configured on the server." });
+        return;
+      }
       if (!process.env.STRIPE_PRICE_ID) {
         sendJson(response, 500, { error: "STRIPE_PRICE_ID is not configured on the server." });
         return;
       }
 
+      const stripe = getStripe();
       const session = await stripe.checkout.sessions.create({
         payment_method_types: ["card"],
         customer_email: user.email,
@@ -417,6 +433,12 @@ export default async function handler(
         return;
       }
 
+      if (!process.env.STRIPE_SECRET_KEY) {
+        sendJson(response, 500, { error: "STRIPE_SECRET_KEY is not configured on the server." });
+        return;
+      }
+
+      const stripe = getStripe();
       const customers = await stripe.customers.list({
         email: user.email,
         limit: 1,
@@ -457,6 +479,12 @@ export default async function handler(
         return;
       }
 
+      if (!process.env.STRIPE_SECRET_KEY) {
+        sendJson(response, 500, { error: "STRIPE_SECRET_KEY is not configured on the server." });
+        return;
+      }
+
+      const stripe = getStripe();
       const customers = await stripe.customers.list({
         email: user.email,
         limit: 1,
