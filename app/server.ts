@@ -150,6 +150,17 @@ export default async function handler(
           spellingRuleShortlist,
           spellingRulePromptHints,
         },
+        envConfigured: {
+          OPENAI_API_KEY: Boolean(process.env.OPENAI_API_KEY),
+          SENTRY_DSN: Boolean(process.env.SENTRY_DSN),
+          SUPABASE_URL: Boolean(process.env.SUPABASE_URL),
+          SUPABASE_PUBLISHABLE_KEY: Boolean(process.env.SUPABASE_PUBLISHABLE_KEY),
+          STRIPE_SECRET_KEY: Boolean(process.env.STRIPE_SECRET_KEY),
+          STRIPE_PRICE_ID: Boolean(process.env.STRIPE_PRICE_ID),
+          LANGFUSE_SECRET_KEY: Boolean(process.env.LANGFUSE_SECRET_KEY),
+          LANGFUSE_PUBLIC_KEY: Boolean(process.env.LANGFUSE_PUBLIC_KEY),
+          LANGFUSE_BASE_URL: Boolean(process.env.LANGFUSE_BASE_URL),
+        },
       });
       return;
     }
