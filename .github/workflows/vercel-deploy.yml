@@ -63,7 +63,8 @@ jobs:
         id: deploy
         run: |
           # Deploy and capture the deployment URL
-          DEPLOY_URL=$(vercel deploy --prebuilt ${{ github.event.inputs.environment == 'production' && '--prod' || '' }} --token=${{ secrets.VERCEL_TOKEN }} \
+          DEPLOY_URL=$(vercel deploy --prebuilt ${{ github.event.inputs.environment == 'production' && '--prod' || '' }} \
+            --token=${{ secrets.VERCEL_TOKEN }} \
             --env OPENAI_API_KEY="${{ secrets.OPENAI_API_KEY }}" \
             --env SENTRY_DSN="${{ secrets.SENTRY_DSN }}" \
             --env SUPABASE_URL="${{ secrets.SUPABASE_URL }}" \
