@@ -167,10 +167,10 @@ function pickNextCustomListWord(
     existing && existing.signature === signature
       ? existing
       : {
-          order: shuffle(words.map((entry) => entry.word.toLowerCase())),
-          nextIndex: 0,
-          signature,
-        };
+        order: shuffle(words.map((entry) => entry.word.toLowerCase())),
+        nextIndex: 0,
+        signature,
+      };
 
   customListRotationCache.set(listId, activeState);
 
@@ -209,10 +209,10 @@ function pickNextForeignOriginWord(
     existing && existing.signature === signature
       ? existing
       : {
-          order: shuffle(words.map((entry) => entry.word.toLowerCase())),
-          nextIndex: 0,
-          signature,
-        };
+        order: shuffle(words.map((entry) => entry.word.toLowerCase())),
+        nextIndex: 0,
+        signature,
+      };
 
   foreignOriginRotationCache.set(key, activeState);
 
@@ -376,6 +376,7 @@ export function pickNextWord(
   customListId?: string,
   foreignOrigin?: string,
   ownerUserId?: string,
+  customWordsFallback?: WordEntry[],
 ): WordEntry {
   const excluded = new Set(excludedWords.map((word) => word.toLowerCase()));
   if (foreignOrigin) {
@@ -384,9 +385,9 @@ export function pickNextWord(
     return pickNextForeignOriginWord(foreignOrigin, foreignWords, excluded);
   }
 
-  const customListWords = customListId
+  const customListWords = customWordsFallback ?? (customListId
     ? getCustomWordListById(customListId, ownerUserId)?.words ?? []
-    : [];
+    : []);
   if (customListId) {
     return pickNextCustomListWord(customListId, customListWords, excluded);
   }

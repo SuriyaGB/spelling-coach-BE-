@@ -58,6 +58,8 @@ export type ImportCustomWordsOptions = {
   model?: string | object;
   generateMetadata?: GenerateCustomWordMetadataFn;
   ownerUserId?: string;
+  existingList?: CustomWordList;
+  skipFileSave?: boolean;
 };
 
 function extractTextContent(content: unknown): string {
@@ -250,14 +252,13 @@ export async function importCustomWords(
   }
 
   const ownerUserId = options.ownerUserId?.trim() ?? "legacy";
-  const allLists = loadCustomWordLists();
-  const existingList = parsedRequest.listId
+  const existingList = options.existingList ?? (parsedRequest.listId
     ? getCustomWordListById(parsedRequest.listId, ownerUserId)
-    : allLists.find(
+    : loadCustomWordLists().find(
         (list) =>
           list.owner_user_id === ownerUserId &&
           list.name.trim().toLowerCase() === parsedRequest.listName.trim().toLowerCase(),
-      );
+      ));
   if (parsedRequest.listId && !existingList) {
     throw new Error(`Unknown custom list: ${parsedRequest.listId}`);
   }
@@ -314,11 +315,13 @@ export async function importCustomWords(
       }
     : createCustomWordList(parsedRequest.listName, mergedWords, ownerUserId);
 
-  const updatedLists = existingList
-    ? allLists.map((list) => (list.id === nextList.id ? nextList : list))
-    : [...allLists, nextList];
-
-  saveCustomWordLists(updatedLists);
+  if (!options.skipFileSave) {
+    const allLists = loadCustomWordLists();
+    const updatedLists = existingList
+      ? allLists.map((list) => (list.id === nextList.id ? nextList : list))
+      : [...allLists, nextList];
+    saveCustomWordLists(updatedLists);
+  }
 
   return {
     list: toListSummary(nextList),

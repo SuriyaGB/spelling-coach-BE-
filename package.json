@@ -15,10 +15,12 @@
     "@langfuse/tracing": "^5.4.1",
     "@opentelemetry/sdk-node": "^0.218.0",
     "@sentry/node": "^7.114.0",
+    "@supabase/supabase-js": "^2.107.0",
     "deepagents": "^0.0.0",
     "dotenv": "^17.4.2",
     "openai": "^6.5.0",
     "stripe": "^22.2.0",
+    "ws": "^8.21.0",
     "zod": "^3.23.8"
   },
   "devDependencies": {

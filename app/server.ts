@@ -6,6 +6,11 @@ import { createServer } from "node:http";
 import { URL } from "node:url";
 import { authenticateRequest } from "./auth.js";
 import {
+  fetchCustomListsFromDB,
+  fetchCustomListByIdFromDB,
+  saveCustomListToDB,
+} from "./supabase.js";
+import {
   buildSpellingCoachInput,
   buildWordPrecomputeInput,
   buildWordResponse,
@@ -156,15 +161,26 @@ export default async function handler(
         foreignOrigin: url.searchParams.get("foreignOrigin") ?? undefined,
         exclude: url.searchParams.get("exclude") ?? undefined,
       });
+      let customWordsFallback: any[] | undefined;
       const user = query.customListId
         ? await authenticateRequest(request)
         : undefined;
+
+      if (query.customListId && user) {
+        const authHeader = request.headers.authorization || "";
+        const dbList = await fetchCustomListByIdFromDB(authHeader, query.customListId, user.id);
+        if (dbList) {
+          customWordsFallback = dbList.words;
+        }
+      }
+
       const word = pickNextWord(
         query.level,
         query.exclude,
         query.customListId,
         query.foreignOrigin,
         user?.id,
+        customWordsFallback,
       );
       if (word.level !== "1") {
         const precomputeInput = buildWordPrecomputeInput(word.word);
@@ -185,9 +201,9 @@ export default async function handler(
 
     if (request.method === "GET" && url.pathname === "/api/custom-lists") {
       const user = await authenticateRequest(request);
-      sendJson(response, 200, {
-        lists: listCustomWordListsForUser(user.id),
-      });
+      const authHeader = request.headers.authorization || "";
+      const lists = await fetchCustomListsFromDB(authHeader, user.id);
+      sendJson(response, 200, { lists });
       return;
     }
 
@@ -258,7 +274,8 @@ export default async function handler(
       }
 
       const user = await authenticateRequest(request);
-      const list = getCustomWordListById(listId, user.id);
+      const authHeader = request.headers.authorization || "";
+      const list = await fetchCustomListByIdFromDB(authHeader, listId, user.id);
       if (!list) {
         sendJson(response, 404, {
           error: `Unknown custom list: ${listId}`,
@@ -339,24 +356,51 @@ export default async function handler(
       const rawBody = await collectBody(request);
       const requestBody = CustomWordImportRequestSchema.parse(JSON.parse(rawBody));
       const user = await authenticateRequest(request);
+      const authHeader = request.headers.authorization || "";
+
+      let existingList: any = undefined;
+      if (requestBody.listId) {
+        const dbList = await fetchCustomListByIdFromDB(authHeader, requestBody.listId, user.id);
+        if (dbList) {
+          existingList = dbList;
+        }
+      }
+
       const result = await importCustomWords(requestBody, {
         ownerUserId: user.id,
+        existingList,
+        skipFileSave: true,
       });
+
+      const savedList = await saveCustomListToDB(
+        authHeader,
+        user.id,
+        requestBody.listName,
+        result.words,
+        requestBody.listId || result.list.id,
+      );
+
       try {
         await recordImportListTrace({
           user,
           listName: requestBody.listName,
           wordCount: requestBody.words.length,
           latencyMs: Date.now() - startTime,
+          inputWords: Array.isArray(requestBody.words) ? requestBody.words : [requestBody.words],
+          outputWords: savedList.words.map((word) => buildWordResponse(word)),
         });
       } catch (err) {
         console.error("[LANGFUSE] Error in recordImportListTrace:", err);
       }
       sendJson(response, 200, {
-        list: result.list,
+        list: {
+          id: savedList.id,
+          name: savedList.name,
+          wordCount: savedList.words.length,
+        },
         importedCount: result.importedCount,
         skippedExistingCount: result.skippedExistingCount,
-        words: result.words.map((word) => buildWordResponse(word)),
+        words: savedList.words.map((word) => buildWordResponse(word)),
       });
       return;
     }

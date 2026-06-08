@@ -70,11 +70,13 @@ export interface ImportListTraceOptions {
     listName: string;
     wordCount: number;
     latencyMs: number;
+    inputWords: string[];
+    outputWords: any[];
 }
 
 export async function recordImportListTrace(options: ImportListTraceOptions) {
     console.log("[LANGFUSE] recordImportListTrace called.");
-    const { user, listName, wordCount, latencyMs } = options;
+    const { user, listName, wordCount, latencyMs, inputWords, outputWords } = options;
 
     try {
         const traceName = "import-custom-list";
@@ -86,6 +88,9 @@ export async function recordImportListTrace(options: ImportListTraceOptions) {
             wordCount: String(wordCount),
             latencyMs: String(latencyMs),
         };
+        if (inputWords && inputWords.length > 0) {
+            metadata.words = inputWords.join(", ");
+        }
 
         console.log("[LANGFUSE] Sending import trace via OpenTelemetry:", JSON.stringify({
             traceName,
@@ -101,8 +106,8 @@ export async function recordImportListTrace(options: ImportListTraceOptions) {
             },
             async () => {
                 const span = startObservation("import-list-span", {
-                    input: { listName, wordCount },
-                    output: { success: true, listName, wordCount },
+                    input: { listName, wordCount, words: inputWords },
+                    output: { success: true, listName, wordCount, importedWords: outputWords },
                 });
 
                 span.end();
