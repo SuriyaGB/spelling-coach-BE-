@@ -8,13 +8,13 @@ on:
   workflow_dispatch:
     inputs:
       environment:
-        description: 'Environment to deploy to (preview or production)'
+        description: 'Environment to deploy to (preview or development)'
         required: true
         default: 'preview'
         type: choice
         options:
           - preview
-          - production
+          - development
       description:
         description: 'Optional notes/reason for this manual deployment'
         required: false
