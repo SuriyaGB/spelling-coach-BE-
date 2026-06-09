@@ -64,9 +64,6 @@ jobs:
         env:
           VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
           VERCEL_PROJECT_ID: ${{ env.DEPLOY_ENV == 'production' && secrets.PROD_VERCEL_PROJECT_ID || secrets.DEV_VERCEL_PROJECT_ID }}
-          # Frontend variables (Vite build)
-          VITE_SUPABASE_URL: ${{ env.DEPLOY_ENV == 'production' && secrets.PROD_VITE_SUPABASE_URL || secrets.DEV_VITE_SUPABASE_URL }}
-          VITE_SUPABASE_PUBLISHABLE_KEY: ${{ env.DEPLOY_ENV == 'production' && secrets.PROD_VITE_SUPABASE_PUBLISHABLE_KEY || secrets.DEV_VITE_SUPABASE_PUBLISHABLE_KEY }}
           # Backend/runtime variables (just in case they are needed at build time)
           OPENAI_API_KEY: ${{ env.DEPLOY_ENV == 'production' && secrets.PROD_OPENAI_API_KEY || secrets.DEV_OPENAI_API_KEY }}
           SENTRY_DSN: ${{ env.DEPLOY_ENV == 'production' && secrets.PROD_SENTRY_DSN || secrets.DEV_SENTRY_DSN }}
