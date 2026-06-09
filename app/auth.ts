@@ -1,4 +1,5 @@
 import type { IncomingMessage } from "node:http";
+import { logError } from "./logging.js";
 
 export type AuthenticatedUser = {
   id: string;
@@ -50,6 +51,8 @@ export async function authenticateRequest(
   });
 
   if (!response.ok) {
+    const errorBody = await response.text().catch(() => "Unknown error");
+    logError(`Supabase auth request failed with status ${response.status}: ${errorBody}`);
     throw new Error("Unauthorized: invalid or expired token.");
   }
 
