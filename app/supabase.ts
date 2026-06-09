@@ -9,21 +9,26 @@ global.WebSocket = ws as any;
 const supabaseUrl = process.env.SUPABASE_URL?.trim();
 const supabaseKey = process.env.SUPABASE_PUBLISHABLE_KEY?.trim();
 
-if (!supabaseUrl || !supabaseKey) {
-  throw new Error("Supabase is not configured. Set SUPABASE_URL and SUPABASE_PUBLISHABLE_KEY.");
+function checkSupabaseConfig() {
+  if (!supabaseUrl || !supabaseKey) {
+    throw new Error("Supabase is not configured. Set SUPABASE_URL and SUPABASE_PUBLISHABLE_KEY.");
+  }
 }
 
-export const supabase = createClient(supabaseUrl, supabaseKey, {
-  auth: {
-    persistSession: false,
-  },
-});
+export const supabase = supabaseUrl && supabaseKey
+  ? createClient(supabaseUrl, supabaseKey, {
+      auth: {
+        persistSession: false,
+      },
+    })
+  : null as any;
 
 /**
  * Creates a Supabase client that acts on behalf of the logged-in user.
  * This ensures that Row Level Security (RLS) is applied correctly.
  */
 export function getSupabaseUserClient(authToken: string) {
+  checkSupabaseConfig();
   const cleanToken = authToken.replace(/^bearer\s+/i, "").trim();
   return createClient(supabaseUrl!, supabaseKey!, {
     auth: {

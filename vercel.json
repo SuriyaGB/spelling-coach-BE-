@@ -5,5 +5,10 @@
       "source": "/api/:path*",
       "destination": "/api"
     }
-  ]
+  ],
+  "functions": {
+    "api/index.ts": {
+      "includeFiles": "reference_data/**"
+    }
+  }
 }
