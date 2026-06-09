@@ -1,6 +1,10 @@
 name: Manual Vercel Deployment
 
 on:
+  push:
+    branches:
+      - prod
+      - dev
   workflow_dispatch:
     inputs:
       environment:
@@ -40,6 +44,8 @@ jobs:
     name: Deploy to Vercel
     needs: test
     runs-on: ubuntu-latest
+    env:
+      DEPLOY_ENV: ${{ github.event.inputs.environment || (github.ref == 'refs/heads/prod' && 'production' || 'preview') }}
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
@@ -48,13 +54,13 @@ jobs:
         run: npm install --global vercel@latest
 
       - name: Pull Vercel Environment Information
-        run: vercel pull --yes --environment=${{ github.event.inputs.environment }} --token=${{ secrets.VERCEL_TOKEN }}
+        run: vercel pull --yes --environment=${{ env.DEPLOY_ENV }} --token=${{ secrets.VERCEL_TOKEN }}
         env:
           VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
           VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
 
       - name: Build Project Artifacts
-        run: vercel build ${{ github.event.inputs.environment == 'production' && '--prod' || '' }} --token=${{ secrets.VERCEL_TOKEN }}
+        run: vercel build ${{ env.DEPLOY_ENV == 'production' && '--prod' || '' }} --token=${{ secrets.VERCEL_TOKEN }}
         env:
           VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
           VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
@@ -63,27 +69,26 @@ jobs:
         id: deploy
         run: |
           # Deploy and capture the deployment URL
-          DEPLOY_URL=$(vercel deploy --prebuilt ${{ github.event.inputs.environment == 'production' && '--prod' || '' }} \
+          DEPLOY_URL=$(vercel deploy --prebuilt ${{ env.DEPLOY_ENV == 'production' && '--prod' || '' }} \
             --token=${{ secrets.VERCEL_TOKEN }} \
-            --env OPENAI_API_KEY="${{ github.event.inputs.environment == 'production' && secrets.PROD_OPENAI_API_KEY || secrets.DEV_OPENAI_API_KEY }}" \
-            --env SENTRY_DSN="${{ github.event.inputs.environment == 'production' && secrets.PROD_SENTRY_DSN || secrets.DEV_SENTRY_DSN }}" \
-            --env SUPABASE_URL="${{ github.event.inputs.environment == 'production' && secrets.PROD_SUPABASE_URL || secrets.DEV_SUPABASE_URL }}" \
-            --env SUPABASE_PUBLISHABLE_KEY="${{ github.event.inputs.environment == 'production' && secrets.PROD_SUPABASE_PUBLISHABLE_KEY || secrets.DEV_SUPABASE_PUBLISHABLE_KEY }}" \
-            --env STRIPE_SECRET_KEY="${{ github.event.inputs.environment == 'production' && secrets.PROD_STRIPE_SECRET_KEY || secrets.DEV_STRIPE_SECRET_KEY }}" \
-            --env STRIPE_PRICE_ID="${{ github.event.inputs.environment == 'production' && secrets.PROD_STRIPE_PRICE_ID || secrets.DEV_STRIPE_PRICE_ID }}" \
-            --env LANGFUSE_SECRET_KEY="${{ github.event.inputs.environment == 'production' && secrets.PROD_LANGFUSE_SECRET_KEY || secrets.DEV_LANGFUSE_SECRET_KEY }}" \
-            --env LANGFUSE_PUBLIC_KEY="${{ github.event.inputs.environment == 'production' && secrets.PROD_LANGFUSE_PUBLIC_KEY || secrets.DEV_LANGFUSE_PUBLIC_KEY }}" \
-            --env LANGFUSE_BASE_URL="${{ github.event.inputs.environment == 'production' && secrets.PROD_LANGFUSE_BASE_URL || secrets.DEV_LANGFUSE_BASE_URL }}")
+            --env OPENAI_API_KEY="${{ env.DEPLOY_ENV == 'production' && secrets.PROD_OPENAI_API_KEY || secrets.DEV_OPENAI_API_KEY }}" \
+            --env SENTRY_DSN="${{ env.DEPLOY_ENV == 'production' && secrets.PROD_SENTRY_DSN || secrets.DEV_SENTRY_DSN }}" \
+            --env SUPABASE_URL="${{ env.DEPLOY_ENV == 'production' && secrets.PROD_SUPABASE_URL || secrets.DEV_SUPABASE_URL }}" \
+            --env SUPABASE_PUBLISHABLE_KEY="${{ env.DEPLOY_ENV == 'production' && secrets.PROD_SUPABASE_PUBLISHABLE_KEY || secrets.DEV_SUPABASE_PUBLISHABLE_KEY }}" \
+            --env STRIPE_SECRET_KEY="${{ env.DEPLOY_ENV == 'production' && secrets.PROD_STRIPE_SECRET_KEY || secrets.DEV_STRIPE_SECRET_KEY }}" \
+            --env STRIPE_PRICE_ID="${{ env.DEPLOY_ENV == 'production' && secrets.PROD_STRIPE_PRICE_ID || secrets.DEV_STRIPE_PRICE_ID }}" \
+            --env LANGFUSE_SECRET_KEY="${{ env.DEPLOY_ENV == 'production' && secrets.PROD_LANGFUSE_SECRET_KEY || secrets.DEV_LANGFUSE_SECRET_KEY }}" \
+            --env LANGFUSE_PUBLIC_KEY="${{ env.DEPLOY_ENV == 'production' && secrets.PROD_LANGFUSE_PUBLIC_KEY || secrets.DEV_LANGFUSE_PUBLIC_KEY }}" \
+            --env LANGFUSE_BASE_URL="${{ env.DEPLOY_ENV == 'production' && secrets.PROD_LANGFUSE_BASE_URL || secrets.DEV_LANGFUSE_BASE_URL }}")
           echo "DEPLOY_URL=$DEPLOY_URL" >> $GITHUB_ENV
         env:
           VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
           VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
 
-
       - name: Create Deployment Summary
         run: |
           echo "### 🚀 Vercel Deployment Successful!" >> $GITHUB_STEP_SUMMARY
-          echo "- **Environment:** \`${{ github.event.inputs.environment }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **Environment:** \`${{ env.DEPLOY_ENV }}\`" >> $GITHUB_STEP_SUMMARY
           echo "- **Triggered By:** @${{ github.actor }}" >> $GITHUB_STEP_SUMMARY
           echo "- **Deployment URL:** [${{ env.DEPLOY_URL }}](${{ env.DEPLOY_URL }})" >> $GITHUB_STEP_SUMMARY
           if [ -n "${{ github.event.inputs.description }}" ]; then
