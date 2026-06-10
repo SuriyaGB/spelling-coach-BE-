@@ -68,7 +68,18 @@ jobs:
       - name: Deploy Project Artifacts to Vercel
         id: deploy
         run: |
-          DEPLOY_URL=$(vercel deploy --prebuilt --token=${{ secrets.VERCEL_TOKEN }})
+          DEPLOY_URL=$(vercel deploy --prebuilt --token=${{ secrets.VERCEL_TOKEN }} \
+            --env OPENAI_API_KEY="${{ secrets.DEV_OPENAI_API_KEY }}" \
+            --env SENTRY_DSN="${{ secrets.DEV_SENTRY_DSN }}" \
+            --env SUPABASE_URL="${{ secrets.DEV_SUPABASE_URL }}" \
+            --env SUPABASE_PUBLISHABLE_KEY="${{ secrets.DEV_SUPABASE_PUBLISHABLE_KEY }}" \
+            --env STRIPE_SECRET_KEY="${{ secrets.DEV_STRIPE_SECRET_KEY }}" \
+            --env STRIPE_PRICE_ID="${{ secrets.DEV_STRIPE_PRICE_ID }}" \
+            --env STRIPE_WEBHOOK_SECRET="${{ secrets.DEV_STRIPE_WEBHOOK_SECRET }}" \
+            --env LANGFUSE_PUBLIC_KEY="${{ secrets.DEV_LANGFUSE_PUBLIC_KEY }}" \
+            --env LANGFUSE_SECRET_KEY="${{ secrets.DEV_LANGFUSE_SECRET_KEY }}" \
+            --env LANGFUSE_BASE_URL="${{ secrets.DEV_LANGFUSE_BASE_URL }}" \
+            --env BETTERSTACK_SOURCE_TOKEN="${{ secrets.DEV_BETTERSTACK_SOURCE_TOKEN }}")
           echo "DEPLOY_URL=$DEPLOY_URL" >> $GITHUB_ENV
         env:
           VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
