@@ -489,7 +489,7 @@ export default async function handler(
       }
 
       if (!process.env.STRIPE_SECRET_KEY) {
-        sendJson(response, 200, { subscribed: false });
+        sendJson(response, 500, { error: "STRIPE_SECRET_KEY is not configured on the server." });
         return;
       }
 
