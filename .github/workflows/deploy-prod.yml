@@ -1,0 +1,95 @@
+name: Deploy to Prod
+
+on:
+  push:
+    branches:
+      - prod
+  workflow_dispatch:
+    inputs:
+      description:
+        description: 'Optional notes/reason for this manual deployment'
+        required: false
+        type: string
+
+jobs:
+  test:
+    name: Run Unit Tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Install Dependencies
+        run: npm ci
+
+      - name: Run Tests
+        run: npm test
+
+  deploy:
+    name: Deploy to Vercel (Prod)
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Install Vercel CLI
+        run: npm install --global vercel@latest
+
+      - name: Pull Vercel Environment Information
+        run: vercel pull --yes --environment=production --token=${{ secrets.VERCEL_TOKEN }}
+        env:
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.PROD_VERCEL_PROJECT_ID }}
+
+      - name: Build Project Artifacts
+        run: vercel build --prod --token=${{ secrets.VERCEL_TOKEN }}
+        env:
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.PROD_VERCEL_PROJECT_ID }}
+          OPENAI_API_KEY: ${{ secrets.PROD_OPENAI_API_KEY }}
+          SENTRY_DSN: ${{ secrets.PROD_SENTRY_DSN }}
+          SUPABASE_URL: ${{ secrets.PROD_SUPABASE_URL }}
+          SUPABASE_PUBLISHABLE_KEY: ${{ secrets.PROD_SUPABASE_PUBLISHABLE_KEY }}
+          STRIPE_SECRET_KEY: ${{ secrets.PROD_STRIPE_SECRET_KEY }}
+          STRIPE_PRICE_ID: ${{ secrets.PROD_STRIPE_PRICE_ID }}
+          STRIPE_WEBHOOK_SECRET: ${{ secrets.PROD_STRIPE_WEBHOOK_SECRET }}
+          LANGFUSE_PUBLIC_KEY: ${{ secrets.PROD_LANGFUSE_PUBLIC_KEY }}
+          LANGFUSE_SECRET_KEY: ${{ secrets.PROD_LANGFUSE_SECRET_KEY }}
+          LANGFUSE_BASE_URL: ${{ secrets.PROD_LANGFUSE_BASE_URL }}
+          BETTERSTACK_SOURCE_TOKEN: ${{ secrets.PROD_BETTERSTACK_SOURCE_TOKEN }}
+
+      - name: Deploy Project Artifacts to Vercel
+        id: deploy
+        run: |
+          DEPLOY_URL=$(vercel deploy --prebuilt --prod --token=${{ secrets.VERCEL_TOKEN }} \
+            --env OPENAI_API_KEY="${{ secrets.PROD_OPENAI_API_KEY }}" \
+            --env SENTRY_DSN="${{ secrets.PROD_SENTRY_DSN }}" \
+            --env SUPABASE_URL="${{ secrets.PROD_SUPABASE_URL }}" \
+            --env SUPABASE_PUBLISHABLE_KEY="${{ secrets.PROD_SUPABASE_PUBLISHABLE_KEY }}" \
+            --env STRIPE_SECRET_KEY="${{ secrets.PROD_STRIPE_SECRET_KEY }}" \
+            --env STRIPE_PRICE_ID="${{ secrets.PROD_STRIPE_PRICE_ID }}" \
+            --env STRIPE_WEBHOOK_SECRET="${{ secrets.PROD_STRIPE_WEBHOOK_SECRET }}" \
+            --env LANGFUSE_PUBLIC_KEY="${{ secrets.PROD_LANGFUSE_PUBLIC_KEY }}" \
+            --env LANGFUSE_SECRET_KEY="${{ secrets.PROD_LANGFUSE_SECRET_KEY }}" \
+            --env LANGFUSE_BASE_URL="${{ secrets.PROD_LANGFUSE_BASE_URL }}" \
+            --env BETTERSTACK_SOURCE_TOKEN="${{ secrets.PROD_BETTERSTACK_SOURCE_TOKEN }}")
+          echo "DEPLOY_URL=$DEPLOY_URL" >> $GITHUB_ENV
+        env:
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.PROD_VERCEL_PROJECT_ID }}
+
+      - name: Create Deployment Summary
+        run: |
+          echo "### 🚀 Vercel Prod Deployment Successful!" >> $GITHUB_STEP_SUMMARY
+          echo "- **Triggered By:** @${{ github.actor }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Deployment URL:** [${{ env.DEPLOY_URL }}](${{ env.DEPLOY_URL }})" >> $GITHUB_STEP_SUMMARY
+          if [ -n "${{ github.event.inputs.description }}" ]; then
+            echo "- **Description/Notes:** ${{ github.event.inputs.description }}" >> $GITHUB_STEP_SUMMARY
+          fi
