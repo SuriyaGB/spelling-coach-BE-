@@ -1,20 +1,11 @@
-name: Manual Vercel Deployment
+name: Deploy to Dev
 
 on:
   push:
     branches:
-      - prod
       - dev
   workflow_dispatch:
     inputs:
-      environment:
-        description: 'Environment to deploy to (preview or production)'
-        required: true
-        default: 'preview'
-        type: choice
-        options:
-          - preview
-          - production
       description:
         description: 'Optional notes/reason for this manual deployment'
         required: false
@@ -41,83 +32,51 @@ jobs:
         run: npm test
 
   deploy:
-    name: Deploy to Vercel
+    name: Deploy to Vercel (Dev)
     needs: test
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      - name: Resolve deployment environment and project
-        id: resolve
-        run: |
-          # Determine DEPLOY_ENV
-          RAW_INPUT="${{ github.event.inputs.environment }}"
-          REF="${{ github.ref }}"
-          if [ -n "$RAW_INPUT" ]; then
-            DEPLOY_ENV="$RAW_INPUT"
-          elif [ "$REF" = "refs/heads/prod" ]; then
-            DEPLOY_ENV="production"
-          else
-            DEPLOY_ENV="preview"
-          fi
-          echo "deploy_env=$DEPLOY_ENV" >> $GITHUB_OUTPUT
-
-          # Determine VERCEL_PROJECT_ID
-          if [ "$DEPLOY_ENV" = "production" ]; then
-            echo "project_id=${{ secrets.PROD_VERCEL_PROJECT_ID }}" >> $GITHUB_OUTPUT
-          else
-            echo "project_id=${{ secrets.DEV_VERCEL_PROJECT_ID }}" >> $GITHUB_OUTPUT
-          fi
-
       - name: Install Vercel CLI
         run: npm install --global vercel@latest
 
       - name: Pull Vercel Environment Information
-        run: vercel pull --yes --environment=${{ steps.resolve.outputs.deploy_env }} --token=${{ secrets.VERCEL_TOKEN }}
+        run: vercel pull --yes --environment=preview --token=${{ secrets.VERCEL_TOKEN }}
         env:
           VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
-          VERCEL_PROJECT_ID: ${{ steps.resolve.outputs.project_id }}
+          VERCEL_PROJECT_ID: ${{ secrets.DEV_VERCEL_PROJECT_ID }}
 
       - name: Build Project Artifacts
-        run: |
-          if [ "${{ steps.resolve.outputs.deploy_env }}" = "production" ]; then
-            vercel build --prod --token=${{ secrets.VERCEL_TOKEN }}
-          else
-            vercel build --token=${{ secrets.VERCEL_TOKEN }}
-          fi
+        run: vercel build --token=${{ secrets.VERCEL_TOKEN }}
         env:
           VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
-          VERCEL_PROJECT_ID: ${{ steps.resolve.outputs.project_id }}
-          OPENAI_API_KEY: ${{ steps.resolve.outputs.deploy_env == 'production' && secrets.PROD_OPENAI_API_KEY || secrets.DEV_OPENAI_API_KEY }}
-          SENTRY_DSN: ${{ steps.resolve.outputs.deploy_env == 'production' && secrets.PROD_SENTRY_DSN || secrets.DEV_SENTRY_DSN }}
-          SUPABASE_URL: ${{ steps.resolve.outputs.deploy_env == 'production' && secrets.PROD_SUPABASE_URL || secrets.DEV_SUPABASE_URL }}
-          SUPABASE_PUBLISHABLE_KEY: ${{ steps.resolve.outputs.deploy_env == 'production' && secrets.PROD_SUPABASE_PUBLISHABLE_KEY || secrets.DEV_SUPABASE_PUBLISHABLE_KEY }}
-          STRIPE_SECRET_KEY: ${{ steps.resolve.outputs.deploy_env == 'production' && secrets.PROD_STRIPE_SECRET_KEY || secrets.DEV_STRIPE_SECRET_KEY }}
-          STRIPE_PRICE_ID: ${{ steps.resolve.outputs.deploy_env == 'production' && secrets.PROD_STRIPE_PRICE_ID || secrets.DEV_STRIPE_PRICE_ID }}
-          STRIPE_WEBHOOK_SECRET: ${{ steps.resolve.outputs.deploy_env == 'production' && secrets.PROD_STRIPE_WEBHOOK_SECRET || secrets.DEV_STRIPE_WEBHOOK_SECRET }}
-          LANGFUSE_PUBLIC_KEY: ${{ steps.resolve.outputs.deploy_env == 'production' && secrets.PROD_LANGFUSE_PUBLIC_KEY || secrets.DEV_LANGFUSE_PUBLIC_KEY }}
-          LANGFUSE_SECRET_KEY: ${{ steps.resolve.outputs.deploy_env == 'production' && secrets.PROD_LANGFUSE_SECRET_KEY || secrets.DEV_LANGFUSE_SECRET_KEY }}
-          LANGFUSE_BASE_URL: ${{ steps.resolve.outputs.deploy_env == 'production' && secrets.PROD_LANGFUSE_BASE_URL || secrets.DEV_LANGFUSE_BASE_URL }}
-          BETTERSTACK_SOURCE_TOKEN: ${{ steps.resolve.outputs.deploy_env == 'production' && secrets.PROD_BETTERSTACK_SOURCE_TOKEN || secrets.DEV_BETTERSTACK_SOURCE_TOKEN }}
+          VERCEL_PROJECT_ID: ${{ secrets.DEV_VERCEL_PROJECT_ID }}
+          OPENAI_API_KEY: ${{ secrets.DEV_OPENAI_API_KEY }}
+          SENTRY_DSN: ${{ secrets.DEV_SENTRY_DSN }}
+          SUPABASE_URL: ${{ secrets.DEV_SUPABASE_URL }}
+          SUPABASE_PUBLISHABLE_KEY: ${{ secrets.DEV_SUPABASE_PUBLISHABLE_KEY }}
+          STRIPE_SECRET_KEY: ${{ secrets.DEV_STRIPE_SECRET_KEY }}
+          STRIPE_PRICE_ID: ${{ secrets.DEV_STRIPE_PRICE_ID }}
+          STRIPE_WEBHOOK_SECRET: ${{ secrets.DEV_STRIPE_WEBHOOK_SECRET }}
+          LANGFUSE_PUBLIC_KEY: ${{ secrets.DEV_LANGFUSE_PUBLIC_KEY }}
+          LANGFUSE_SECRET_KEY: ${{ secrets.DEV_LANGFUSE_SECRET_KEY }}
+          LANGFUSE_BASE_URL: ${{ secrets.DEV_LANGFUSE_BASE_URL }}
+          BETTERSTACK_SOURCE_TOKEN: ${{ secrets.DEV_BETTERSTACK_SOURCE_TOKEN }}
 
       - name: Deploy Project Artifacts to Vercel
         id: deploy
         run: |
-          if [ "${{ steps.resolve.outputs.deploy_env }}" = "production" ]; then
-            DEPLOY_URL=$(vercel deploy --prebuilt --prod --token=${{ secrets.VERCEL_TOKEN }})
-          else
-            DEPLOY_URL=$(vercel deploy --prebuilt --token=${{ secrets.VERCEL_TOKEN }})
-          fi
+          DEPLOY_URL=$(vercel deploy --prebuilt --token=${{ secrets.VERCEL_TOKEN }})
           echo "DEPLOY_URL=$DEPLOY_URL" >> $GITHUB_ENV
         env:
           VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
-          VERCEL_PROJECT_ID: ${{ steps.resolve.outputs.project_id }}
+          VERCEL_PROJECT_ID: ${{ secrets.DEV_VERCEL_PROJECT_ID }}
 
       - name: Create Deployment Summary
         run: |
-          echo "### 🚀 Vercel Deployment Successful!" >> $GITHUB_STEP_SUMMARY
-          echo "- **Environment:** \`${{ steps.resolve.outputs.deploy_env }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "### 🚀 Vercel Dev Deployment Successful!" >> $GITHUB_STEP_SUMMARY
           echo "- **Triggered By:** @${{ github.actor }}" >> $GITHUB_STEP_SUMMARY
           echo "- **Deployment URL:** [${{ env.DEPLOY_URL }}](${{ env.DEPLOY_URL }})" >> $GITHUB_STEP_SUMMARY
           if [ -n "${{ github.event.inputs.description }}" ]; then
