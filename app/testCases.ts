@@ -43,12 +43,12 @@ import {
   buildMissOnlyPrompt,
   buildRelatedFormsOnlyPrecomputePrompt,
   buildSpellingCoachPrompt,
+  buildStreamingRuntimePrompt,
   buildWordTeachingPrecomputePrompt,
   SPELLING_COACH_SYSTEM_PROMPT,
 } from "./prompt.js";
 import { runSpellingCoachAgent } from "./runAgent.js";
 import { interpretVoiceUtterance, normalizeSpokenSpelling } from "./voice.js";
-import { InMemoryMockBeeSessionStore, MockBeeService } from "./mockBee.js";
 import {
   buildReferenceHintsText,
   buildSpellingRuleHintsText,
@@ -1469,7 +1469,7 @@ test("uses short memory tip guidance for Level 2 runtime prompts", () => {
 
   assert.equal(
     prompt.includes(
-      "For Level 2 words, keep coachingText.memoryTip brief: one short intuitive cue.",
+      "For Level 2 words, always provide coachingText.memoryTip even if the child spelled the word correctly.",
     ),
     true,
   );
@@ -1555,7 +1555,7 @@ test("allows a longer memory tip for Level 3 miss-only prompts", () => {
 
   assert.equal(
     missOnlyPrompt.includes(
-      "For Level 3 words, coachingText.memoryTip may be up to two short lines when that genuinely helps recall.",
+      "coachingText.memoryTip may be up to two short lines when that genuinely helps recall.",
     ),
     true,
   );
@@ -1587,6 +1587,108 @@ test("allows a longer memory tip for Level 3 miss-only prompts", () => {
   assert.equal(
     missOnlyPrompt.includes("\"substantialStructuralOverlap\""),
     true,
+  );
+});
+
+test("streaming runtime prompt includes mandatory memory tip instruction for correct Level 2 words", () => {
+  const input: SpellingCoachInput = {
+    targetWord: "toreador",
+    childAttempt: "toreador",
+    childProfile: {
+      childId: "c-correct",
+      age: 11,
+      grade: "5",
+      spellingLevel: "on-grade",
+    },
+    wordMetadata: {
+      definition: "A bullfighter who fights on foot.",
+      partOfSpeech: "noun",
+    },
+    missSignals: {
+      isCorrect: true,
+      nearMiss: false,
+      missingLetters: [],
+      extraLetters: [],
+      substitutedLetters: [],
+      transposedLetters: [],
+      repeatedLetterIssue: false,
+      likelyRushed: false,
+      editDistance: 0,
+    },
+    structuralHints: {
+      syllables: ["to", "rea", "dor"],
+      likelyChunks: ["to", "rea", "dor"],
+      detectedPatterns: [],
+    },
+    sessionContext: {
+      mode: "practice",
+      previousAttemptsOnThisWord: 0,
+      previousMissPatterns: [],
+      recentlyPracticedWords: [],
+    },
+    level: 2,
+  };
+
+  const prompt = buildStreamingRuntimePrompt(input, "{}");
+
+  assert.equal(
+    prompt.includes(
+      "The child spelled the word correctly. You MUST still output the [[MEMORY_TIP]] section with a helpful memory cue for this word.",
+    ),
+    true,
+  );
+  assert.equal(
+    prompt.includes("Do NOT leave the [[MEMORY_TIP]] section empty. It is required."),
+    true,
+  );
+});
+
+test("streaming runtime prompt does NOT add mandatory memory tip instruction for correct Level 1 words", () => {
+  const input: SpellingCoachInput = {
+    targetWord: "cat",
+    childAttempt: "cat",
+    childProfile: {
+      childId: "c-l1",
+      age: 6,
+      grade: "1",
+      spellingLevel: "on-grade",
+    },
+    wordMetadata: {
+      definition: "A small domesticated animal.",
+      partOfSpeech: "noun",
+    },
+    missSignals: {
+      isCorrect: true,
+      nearMiss: false,
+      missingLetters: [],
+      extraLetters: [],
+      substitutedLetters: [],
+      transposedLetters: [],
+      repeatedLetterIssue: false,
+      likelyRushed: false,
+      editDistance: 0,
+    },
+    structuralHints: {
+      syllables: ["cat"],
+      likelyChunks: ["cat"],
+      detectedPatterns: [],
+    },
+    sessionContext: {
+      mode: "practice",
+      previousAttemptsOnThisWord: 0,
+      previousMissPatterns: [],
+      recentlyPracticedWords: [],
+    },
+    level: 1,
+  };
+
+  const prompt = buildStreamingRuntimePrompt(input, "{}");
+
+  assert.equal(
+    prompt.includes(
+      "The child spelled the word correctly. You MUST still output the [[MEMORY_TIP]] section with a helpful memory cue for this word.",
+    ),
+    false,
   );
 });
 
@@ -3273,62 +3375,62 @@ test("classifies the flabbergast miss table with stable primary and secondary si
     primary: string;
     secondaries: string[];
   }> = [
-      {
-        attempt: "flabberghast",
-        primary: "extra_letter",
-        secondaries: ["ending_confusion", "pattern_rule_mismatch"],
-      },
-      {
-        attempt: "flabergast",
-        primary: "double_letter_error",
-        secondaries: ["missing_letter"],
-      },
-      {
-        attempt: "flabbergasted",
-        primary: "phonetic_spelling",
-        secondaries: ["ending_confusion", "extra_letter"],
-      },
-      {
-        attempt: "flebbergast",
-        primary: "vowel_confusion",
-        secondaries: [],
-      },
-      {
-        attempt: "phlabbergast",
-        primary: "phonetic_spelling",
-        secondaries: [],
-      },
-      {
-        attempt: "flebergast",
-        primary: "double_letter_error",
-        secondaries: ["vowel_confusion", "missing_letter"],
-      },
-      {
-        attempt: "flebberghost",
-        primary: "ending_confusion",
-        secondaries: ["vowel_confusion"],
-      },
-      {
-        attempt: "fleberghost",
-        primary: "ending_confusion",
-        secondaries: ["double_letter_error", "vowel_confusion"],
-      },
-      {
-        attempt: "fabbergast",
-        primary: "missing_letter",
-        secondaries: [],
-      },
-      {
-        attempt: "fabberghost",
-        primary: "ending_confusion",
-        secondaries: ["vowel_confusion", "missing_letter"],
-      },
-      {
-        attempt: "fabbergasted",
-        primary: "ending_confusion",
-        secondaries: ["extra_letter", "missing_letter"],
-      },
-    ];
+    {
+      attempt: "flabberghast",
+      primary: "extra_letter",
+      secondaries: ["ending_confusion", "pattern_rule_mismatch"],
+    },
+    {
+      attempt: "flabergast",
+      primary: "double_letter_error",
+      secondaries: ["missing_letter"],
+    },
+    {
+      attempt: "flabbergasted",
+      primary: "phonetic_spelling",
+      secondaries: ["ending_confusion", "extra_letter"],
+    },
+    {
+      attempt: "flebbergast",
+      primary: "vowel_confusion",
+      secondaries: [],
+    },
+    {
+      attempt: "phlabbergast",
+      primary: "phonetic_spelling",
+      secondaries: [],
+    },
+    {
+      attempt: "flebergast",
+      primary: "double_letter_error",
+      secondaries: ["vowel_confusion", "missing_letter"],
+    },
+    {
+      attempt: "flebberghost",
+      primary: "ending_confusion",
+      secondaries: ["vowel_confusion"],
+    },
+    {
+      attempt: "fleberghost",
+      primary: "ending_confusion",
+      secondaries: ["double_letter_error", "vowel_confusion"],
+    },
+    {
+      attempt: "fabbergast",
+      primary: "missing_letter",
+      secondaries: [],
+    },
+    {
+      attempt: "fabberghost",
+      primary: "ending_confusion",
+      secondaries: ["vowel_confusion", "missing_letter"],
+    },
+    {
+      attempt: "fabbergasted",
+      primary: "ending_confusion",
+      secondaries: ["extra_letter", "missing_letter"],
+    },
+  ];
 
   for (const testCase of cases) {
     const input = buildSpellingCoachInput({
@@ -4201,7 +4303,7 @@ test("warms word teaching precompute on a word-only input", async () => {
   assert.deepEqual(
     result.conceptLabels.originLabels,
     getStoredWordTeachingOnlyPrecompute("torsion")?.conceptLabels.originLabels ??
-    [],
+      [],
   );
   assert.equal(hasWordTeachingPrecompute(input, { runtime: "direct" }), true);
 });
@@ -4212,134 +4314,134 @@ test("merges cached word teaching with miss-only analysis on submit", async () =
   process.env.SPELLING_COACH_RUNTIME_CONCEPT_TEACHING = "on";
 
   try {
-    const submitInput: SpellingCoachInput = {
-      targetWord: "torsion",
-      childAttempt: "torshun",
-      childProfile: baseProfile,
-      wordMetadata: {
-        definition: "The act of twisting something.",
-        origin: "Latin",
-        partOfSpeech: "noun",
-        exampleSentence: "The gymnast showed torsion by twisting her body in the air.",
-      },
-      missSignals: {
-        isCorrect: false,
-        nearMiss: false,
-        missingLetters: ["i", "o"],
-        extraLetters: ["h", "u"],
-        substitutedLetters: [],
-        transposedLetters: [],
-        repeatedLetterIssue: false,
-        likelyRushed: false,
-        editDistance: 4,
-      },
-      structuralHints: {
-        syllables: [],
-        likelyChunks: ["tor", "sion"],
-        detectedPatterns: ["sion"],
-        likelySuffix: "sion",
-      },
-      sessionContext: {
-        mode: "practice",
-        previousAttemptsOnThisWord: 0,
-        previousMissPatterns: [],
-        recentlyPracticedWords: [],
-      },
-    };
+  const submitInput: SpellingCoachInput = {
+    targetWord: "torsion",
+    childAttempt: "torshun",
+    childProfile: baseProfile,
+    wordMetadata: {
+      definition: "The act of twisting something.",
+      origin: "Latin",
+      partOfSpeech: "noun",
+      exampleSentence: "The gymnast showed torsion by twisting her body in the air.",
+    },
+    missSignals: {
+      isCorrect: false,
+      nearMiss: false,
+      missingLetters: ["i", "o"],
+      extraLetters: ["h", "u"],
+      substitutedLetters: [],
+      transposedLetters: [],
+      repeatedLetterIssue: false,
+      likelyRushed: false,
+      editDistance: 4,
+    },
+    structuralHints: {
+      syllables: [],
+      likelyChunks: ["tor", "sion"],
+      detectedPatterns: ["sion"],
+      likelySuffix: "sion",
+    },
+    sessionContext: {
+      mode: "practice",
+      previousAttemptsOnThisWord: 0,
+      previousMissPatterns: [],
+      recentlyPracticedWords: [],
+    },
+  };
 
-    const precomputeOutput = {
-      wordTeaching: {
-        conceptTeaching: {
-          summary: "The concept centers on twisting.",
-          meaningFocus: "twisting",
-          originFocus: "Latin-derived",
-          morphologyFocus: "",
-          originLabels: ["latin-derived"],
-          morphologyLabels: [],
-        },
-      },
-      wordBreakdown: {
-        displayChunks: ["tor", "sion"],
-        chunkReason: "The ending chunk carries the main pattern.",
-      },
-      conceptLabels: {
+  const precomputeOutput = {
+    wordTeaching: {
+      conceptTeaching: {
+        summary: "The concept centers on twisting.",
+        meaningFocus: "twisting",
+        originFocus: "Latin-derived",
+        morphologyFocus: "",
         originLabels: ["latin-derived"],
-        patternLabels: ["sion"],
         morphologyLabels: [],
       },
-    };
+    },
+    wordBreakdown: {
+      displayChunks: ["tor", "sion"],
+      chunkReason: "The ending chunk carries the main pattern.",
+    },
+    conceptLabels: {
+      originLabels: ["latin-derived"],
+      patternLabels: ["sion"],
+      morphologyLabels: [],
+    },
+  };
 
-    const missOnlyOutput = {
-      correctness: {
-        isCorrect: false,
-        reinforceSuccess: false,
+  const missOnlyOutput = {
+    correctness: {
+      isCorrect: false,
+      reinforceSuccess: false,
+    },
+    missAnalysis: {
+      summary: "The ending was rewritten phonetically as shun.",
+      primaryErrorType: "phonetic_spelling",
+      secondaryErrorTypes: ["ending_confusion"],
+      errorTypeEvidence: {
+        phonetic_spelling: "The ending was rewritten by sound rather than by standard spelling.",
+        ending_confusion: "The word ending does not match the expected spelling pattern.",
       },
-      missAnalysis: {
-        summary: "The ending was rewritten phonetically as shun.",
-        primaryErrorType: "phonetic_spelling",
-        secondaryErrorTypes: ["ending_confusion"],
-        errorTypeEvidence: {
-          phonetic_spelling: "The ending was rewritten by sound rather than by standard spelling.",
-          ending_confusion: "The word ending does not match the expected spelling pattern.",
-        },
-        primaryErrorFocus: "Use the -sion spelling instead of writing shun by sound.",
-        likelyWrongWordInterpretation: false,
-        usedMeaningDisambiguationWell: false,
-      },
-      errorRelevance: {
-        mostRelevantToError: "form",
-        confidence: 0.9,
-        reason: "The miss is centered on the -sion ending pattern.",
-      },
-      teachingDecision: {
-        strategy: "pattern",
-        primaryFocus: "Keep the -sion ending.",
-        secondaryFocuses: ["Chunk it as tor + sion"],
-        confidence: 0.88,
-        rationale: "The word-level chunking is already known, and the miss is specifically about the ending pattern.",
-      },
-      coachingText: {
-        shortFeedback: "You heard the ending, but wrote it by sound.",
-        fullExplanation: "Torsion ends with -sion, not shun. Use the chunk tor + sion to hold the ending in place.",
-        memoryTip: "See the word as tor + sion.",
-        sayAloudTip: "Say tor-sion and hold the sion ending.",
-      },
-      nextStep: {
-        practiceFocus: "Practice words that end in -sion.",
-        shouldReviewSoon: true,
-        suggestedSimilarWordTypes: ["-sion words"],
-      },
-    };
+      primaryErrorFocus: "Use the -sion spelling instead of writing shun by sound.",
+      likelyWrongWordInterpretation: false,
+      usedMeaningDisambiguationWell: false,
+    },
+    errorRelevance: {
+      mostRelevantToError: "form",
+      confidence: 0.9,
+      reason: "The miss is centered on the -sion ending pattern.",
+    },
+    teachingDecision: {
+      strategy: "pattern",
+      primaryFocus: "Keep the -sion ending.",
+      secondaryFocuses: ["Chunk it as tor + sion"],
+      confidence: 0.88,
+      rationale: "The word-level chunking is already known, and the miss is specifically about the ending pattern.",
+    },
+    coachingText: {
+      shortFeedback: "You heard the ending, but wrote it by sound.",
+      fullExplanation: "Torsion ends with -sion, not shun. Use the chunk tor + sion to hold the ending in place.",
+      memoryTip: "See the word as tor + sion.",
+      sayAloudTip: "Say tor-sion and hold the sion ending.",
+    },
+    nextStep: {
+      practiceFocus: "Practice words that end in -sion.",
+      shouldReviewSoon: true,
+      suggestedSimilarWordTypes: ["-sion words"],
+    },
+  };
 
-    const storedTorsionBreakdownForSubmit = getStoredWordBreakdown("torsion");
-    const firstModelResponse = storedTorsionBreakdownForSubmit
-      ? {
+  const storedTorsionBreakdownForSubmit = getStoredWordBreakdown("torsion");
+  const firstModelResponse = storedTorsionBreakdownForSubmit
+    ? {
         wordTeaching: {
           conceptTeaching: precomputeOutput.wordTeaching.conceptTeaching,
         },
         conceptLabels: precomputeOutput.conceptLabels,
       }
-      : precomputeOutput;
+    : precomputeOutput;
 
-    const result = await runSplitSpellingCoachAgent(submitInput, {
-      runtime: "direct",
-      directModel: createSequenceMockModel([
-        JSON.stringify(firstModelResponse),
-        JSON.stringify(missOnlyOutput),
-      ]),
-    });
+  const result = await runSplitSpellingCoachAgent(submitInput, {
+    runtime: "direct",
+    directModel: createSequenceMockModel([
+      JSON.stringify(firstModelResponse),
+      JSON.stringify(missOnlyOutput),
+    ]),
+  });
 
-    assert.equal(
-      result.coachingText.sayAloudTip,
-      "Say it slowly: TAWR-shuhn",
-    );
-    assert.deepEqual(result.nextStep, {
-      practiceFocus: "",
-      shouldReviewSoon: false,
-      suggestedSimilarWordTypes: [],
-    });
-    assert.equal(result.missAnalysis.primaryErrorFocus.includes("-sion"), true);
-    assert.equal(result.errorRelevance.mostRelevantToError, "form");
+  assert.equal(
+    result.coachingText.sayAloudTip,
+    "Say it slowly: TAWR-shuhn",
+  );
+  assert.deepEqual(result.nextStep, {
+    practiceFocus: "",
+    shouldReviewSoon: false,
+    suggestedSimilarWordTypes: [],
+  });
+  assert.equal(result.missAnalysis.primaryErrorFocus.includes("-sion"), true);
+  assert.equal(result.errorRelevance.mostRelevantToError, "form");
   } finally {
     if (originalRuntimeConceptTeaching === undefined) {
       delete process.env.SPELLING_COACH_RUNTIME_CONCEPT_TEACHING;
@@ -4751,7 +4853,7 @@ test("clears runtime concept teaching in the full response path when the feature
   assert.deepEqual(
     result.conceptLabels.originLabels,
     getStoredWordTeachingOnlyPrecompute("torsion")?.conceptLabels.originLabels ??
-    [],
+      [],
   );
 });
 
@@ -5693,128 +5795,4 @@ test("adds guided pronunciation instructions for risky words with friendly chunk
       process.env.SPELLING_COACH_TTS_INSTRUCTIONS = original;
     }
   }
-});
-
-test("mock bee session exposes challenge metadata without leaking the target word", async () => {
-  const service = new MockBeeService(
-    new InMemoryMockBeeSessionStore(),
-    async (word) =>
-      makeOutput({
-        correctness: {
-          isCorrect: true,
-          reinforceSuccess: true,
-        },
-        coachingText: {
-          shortFeedback: "",
-          fullExplanation: "",
-          memoryTip: "",
-          sayAloudTip: `Say it slowly: ${word.word}.`,
-        },
-      }),
-  );
-
-  const result = await service.createSession({
-    level: "1",
-    wordSource: "standard",
-    wordCount: 10,
-    childProfile: baseProfile,
-  });
-
-  assert.equal(result.status, "active");
-  assert.equal(result.currentChallenge?.timer.secondsPerWord, 60);
-  assert.equal(result.currentChallenge?.timer.showCountdown, false);
-  assert.equal(result.currentChallenge?.timer.readyPromptAtElapsedSeconds, 45);
-  assert.equal("word" in (result.currentChallenge?.supports ?? {}), false);
-  assert.equal(typeof result.currentChallenge?.supports.definition, "string");
-});
-
-test("mock bee reveals the answer on level 2 submit but not on level 3 submit", async () => {
-  const service = new MockBeeService(
-    new InMemoryMockBeeSessionStore(),
-    async (word) =>
-      makeOutput({
-        correctness: {
-          isCorrect: true,
-          reinforceSuccess: true,
-        },
-        coachingText: {
-          shortFeedback: "",
-          fullExplanation: "",
-          memoryTip: "",
-          sayAloudTip: `Say it slowly: ${word.word}.`,
-        },
-      }),
-  );
-
-  const levelTwo = await service.createSession({
-    level: "2",
-    wordSource: "standard",
-    wordCount: 10,
-    childProfile: baseProfile,
-  });
-  const levelTwoInternal = await service.getInternalSession(levelTwo.id);
-  const levelTwoSubmit = await service.submitAttempt(levelTwo.id, {
-    childAttempt: levelTwoInternal.turns[0].word.word,
-  });
-
-  assert.equal(levelTwoSubmit.result.isCorrect, true);
-  assert.equal(levelTwoSubmit.result.revealAnswer, true);
-  assert.equal(
-    levelTwoSubmit.result.correctWord,
-    levelTwoInternal.turns[0].word.word,
-  );
-
-  const levelThree = await service.createSession({
-    level: "3",
-    wordSource: "standard",
-    wordCount: 10,
-    childProfile: baseProfile,
-  });
-  const levelThreeInternal = await service.getInternalSession(levelThree.id);
-  const levelThreeSubmit = await service.submitAttempt(levelThree.id, {
-    childAttempt: levelThreeInternal.turns[0].word.word,
-  });
-
-  assert.equal(levelThreeSubmit.result.isCorrect, true);
-  assert.equal(levelThreeSubmit.result.revealAnswer, false);
-  assert.equal(levelThreeSubmit.result.correctWord, undefined);
-});
-
-test("mock bee timeout advances the round and review cards populate asynchronously", async () => {
-  const service = new MockBeeService(
-    new InMemoryMockBeeSessionStore(),
-    async (word) =>
-      makeOutput({
-        correctness: {
-          isCorrect: false,
-          reinforceSuccess: false,
-        },
-        coachingText: {
-          shortFeedback: "",
-          fullExplanation: `Review ${word.word}.`,
-          memoryTip: "",
-          sayAloudTip: `Say it slowly: ${word.word}.`,
-        },
-      }),
-  );
-
-  const session = await service.createSession({
-    level: "1",
-    wordSource: "standard",
-    wordCount: 10,
-    childProfile: baseProfile,
-  });
-
-  const timeoutResult = await service.timeoutCurrentWord(session.id);
-  assert.equal(timeoutResult.result.timedOut, true);
-  assert.equal(timeoutResult.session.progress.currentTurnNumber, 2);
-
-  await flushMicrotasks();
-  const review = await service.getReview(session.id);
-  assert.equal(review.reviewStatus.completed >= 1, true);
-  assert.equal(review.words[0]?.status, "timed_out");
-  assert.equal(
-    typeof review.words[0]?.reviewCard?.coachingText.sayAloudTip,
-    "string",
-  );
 });

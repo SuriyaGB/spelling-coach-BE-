@@ -11,7 +11,6 @@ import {
   type WordEntry,
 } from "./wordCatalog.js";
 import { buildDeterministicMissSignalFacts } from "./deterministicMissSignals.js";
-import { deriveMainOrigin } from "./mainOrigin.js";
 
 export const CoachingRequestSchema = z
   .object({
@@ -89,17 +88,12 @@ export function maskWordInPublicText(
 }
 
 export function buildWordResponse(word: WordEntry) {
-  const originLabels =
-    word.concept_labels?.origin_labels
-    ?? word.word_teaching?.concept_teaching.origin_labels;
-
   return {
     word: word.word,
     level: word.level,
     gradeBand: word.grade_band,
     difficulty: word.difficulty,
     origin: word.origin,
-    mainOrigin: deriveMainOrigin(word.origin, originLabels),
     definition: maskWordInPublicText(word.definition, word.word),
     exampleSentence: maskWordInPublicText(
       word.example_sentence,
@@ -544,6 +538,7 @@ export function buildSpellingCoachInputFromWordEntry(
     targetWord: word.word,
     childAttempt: parsedRequest.childAttempt,
     childProfile: parsedRequest.childProfile,
+    level: !isNaN(Number(word.level)) ? Number(word.level) : undefined,
     wordMetadata: {
       definition: word.definition,
       origin: word.origin,

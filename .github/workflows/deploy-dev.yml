@@ -66,10 +66,6 @@ jobs:
           [ -z "${{ secrets.DEV_SENTRY_DSN }}" ] && MISSING="$MISSING DEV_SENTRY_DSN"
           [ -z "${{ secrets.DEV_SUPABASE_URL }}" ] && MISSING="$MISSING DEV_SUPABASE_URL"
           [ -z "${{ secrets.DEV_SUPABASE_PUBLISHABLE_KEY }}" ] && MISSING="$MISSING DEV_SUPABASE_PUBLISHABLE_KEY"
-          [ -z "${{ secrets.DEV_SUPABASE_SERVICE_ROLE_KEY }}" ] && MISSING="$MISSING DEV_SUPABASE_SERVICE_ROLE_KEY"
-          [ -z "${{ secrets.DEV_RESEND_API_KEY }}" ] && MISSING="$MISSING DEV_RESEND_API_KEY"
-          [ -z "${{ secrets.DEV_WEEKLY_EMAIL_FROM }}" ] && MISSING="$MISSING DEV_WEEKLY_EMAIL_FROM"
-          [ -z "${{ secrets.DEV_CRON_SECRET }}" ] && MISSING="$MISSING DEV_CRON_SECRET"
           [ -z "${{ secrets.DEV_STRIPE_SECRET_KEY }}" ] && MISSING="$MISSING DEV_STRIPE_SECRET_KEY"
           [ -z "${{ secrets.DEV_STRIPE_PRICE_ID }}" ] && MISSING="$MISSING DEV_STRIPE_PRICE_ID"
           [ -z "${{ secrets.DEV_LANGFUSE_PUBLIC_KEY }}" ] && MISSING="$MISSING DEV_LANGFUSE_PUBLIC_KEY"
@@ -118,10 +114,6 @@ jobs:
           echo "SENTRY_DSN=${{ secrets.DEV_SENTRY_DSN }}" >> .env
           echo "SUPABASE_URL=${{ secrets.DEV_SUPABASE_URL }}" >> .env
           echo "SUPABASE_PUBLISHABLE_KEY=${{ secrets.DEV_SUPABASE_PUBLISHABLE_KEY }}" >> .env
-          echo "SUPABASE_SERVICE_ROLE_KEY=${{ secrets.DEV_SUPABASE_SERVICE_ROLE_KEY }}" >> .env
-          echo "RESEND_API_KEY=${{ secrets.DEV_RESEND_API_KEY }}" >> .env
-          echo "WEEKLY_EMAIL_FROM=${{ secrets.DEV_WEEKLY_EMAIL_FROM }}" >> .env
-          echo "CRON_SECRET=${{ secrets.DEV_CRON_SECRET }}" >> .env
           echo "STRIPE_SECRET_KEY=${{ secrets.DEV_STRIPE_SECRET_KEY }}" >> .env
           echo "STRIPE_PRICE_ID=${{ secrets.DEV_STRIPE_PRICE_ID }}" >> .env
           echo "LANGFUSE_PUBLIC_KEY=${{ secrets.DEV_LANGFUSE_PUBLIC_KEY }}" >> .env
@@ -135,10 +127,6 @@ jobs:
           SENTRY_DSN: ${{ secrets.DEV_SENTRY_DSN }}
           SUPABASE_URL: ${{ secrets.DEV_SUPABASE_URL }}
           SUPABASE_PUBLISHABLE_KEY: ${{ secrets.DEV_SUPABASE_PUBLISHABLE_KEY }}
-          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.DEV_SUPABASE_SERVICE_ROLE_KEY }}
-          RESEND_API_KEY: ${{ secrets.DEV_RESEND_API_KEY }}
-          WEEKLY_EMAIL_FROM: ${{ secrets.DEV_WEEKLY_EMAIL_FROM }}
-          CRON_SECRET: ${{ secrets.DEV_CRON_SECRET }}
           STRIPE_SECRET_KEY: ${{ secrets.DEV_STRIPE_SECRET_KEY }}
           STRIPE_PRICE_ID: ${{ secrets.DEV_STRIPE_PRICE_ID }}
           LANGFUSE_PUBLIC_KEY: ${{ secrets.DEV_LANGFUSE_PUBLIC_KEY }}
@@ -155,10 +143,6 @@ jobs:
             --env SENTRY_DSN="${{ secrets.DEV_SENTRY_DSN }}" \
             --env SUPABASE_URL="${{ secrets.DEV_SUPABASE_URL }}" \
             --env SUPABASE_PUBLISHABLE_KEY="${{ secrets.DEV_SUPABASE_PUBLISHABLE_KEY }}" \
-            --env SUPABASE_SERVICE_ROLE_KEY="${{ secrets.DEV_SUPABASE_SERVICE_ROLE_KEY }}" \
-            --env RESEND_API_KEY="${{ secrets.DEV_RESEND_API_KEY }}" \
-            --env WEEKLY_EMAIL_FROM="${{ secrets.DEV_WEEKLY_EMAIL_FROM }}" \
-            --env CRON_SECRET="${{ secrets.DEV_CRON_SECRET }}" \
             --env STRIPE_SECRET_KEY="${{ secrets.DEV_STRIPE_SECRET_KEY }}" \
             --env STRIPE_PRICE_ID="${{ secrets.DEV_STRIPE_PRICE_ID }}" \
             --env LANGFUSE_PUBLIC_KEY="${{ secrets.DEV_LANGFUSE_PUBLIC_KEY }}" \

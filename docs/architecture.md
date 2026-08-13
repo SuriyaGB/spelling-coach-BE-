@@ -227,7 +227,7 @@ That warm path lives in:
 
 Endpoint:
 
-- `GET /api/words/:word/pronunciation`
+- `GET /api/words/pronunciation?challengeId=<uuid>&sessionId=<uuid>`
 
 File:
 
@@ -235,8 +235,9 @@ File:
 
 Behavior:
 
-- generates or returns pronunciation audio
-- does not compute chunking or concept teaching
+- Resolves the target word from the active session via `challengeId` without exposing the word in the URL.
+- Generates and returns pronunciation audio.
+- Requires a valid bearer token (auth enforced via Supabase RLS).
 
 ## 3. Submit A Spelling Attempt
 
@@ -304,7 +305,7 @@ Health and status:
 Word selection and pronunciation:
 
 - `GET /api/words/next`
-- `GET /api/words/:word/pronunciation`
+- `GET /api/words/pronunciation?challengeId=<uuid>&sessionId=<uuid>`
 
 Coaching:
 

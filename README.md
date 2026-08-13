@@ -91,20 +91,6 @@ npm run dev
 
 These are only needed if you want authenticated routes to work, such as user-scoped custom lists.
 
-### Weekly progress emails
-
-Weekly reports are disabled for every account until the account holder enables them in Profile. On Vercel, the cron job runs every Monday at 08:00 UTC and sends the previous calendar week's summary only when the user practiced at least one word.
-
-Set these server-side environment variables before enabling the feature:
-
-- `SUPABASE_SERVICE_ROLE_KEY` — server-only Supabase service-role key; never expose this to the browser.
-- `RESEND_API_KEY` — API key for the sending domain in Resend.
-- `WEEKLY_EMAIL_FROM` — verified sender, for example `Spelling Scholar <updates@example.com>`.
-- `CRON_SECRET` — a long random secret; Vercel uses it to authorize `/api/cron/weekly-report`.
-- `APP_BASE_URL` — public frontend URL used for the report link, for example `https://app.example.com`.
-
-Run `db/migration/V14__add_weekly_email_reports.sql` in the Supabase SQL editor before deploying. It adds the opt-in preference and an idempotent send log.
-
 ## Common Local Start Commands
 
 Default run:

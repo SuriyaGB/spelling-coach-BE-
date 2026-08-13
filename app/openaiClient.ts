@@ -10,6 +10,7 @@ export function getOpenAIClient(): OpenAI {
   if (!openAICache) {
     openAICache = new OpenAI({
       apiKey: process.env.OPENAI_API_KEY,
+      maxRetries: 3,
     });
   }
 

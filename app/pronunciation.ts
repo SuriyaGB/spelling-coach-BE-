@@ -89,23 +89,35 @@ export async function generateSpeechAudio(
   const cachedAudio = useCache ? audioCache.get(cacheKey) : undefined;
 
   if (cachedAudio) {
+    console.log(`[TTS] Cache hit for ${cacheKey}`);
     return cachedAudio;
   }
 
+  console.log(`[TTS] Generating audio for ${cacheKey}`);
   const audioPromise = (async () => {
-    const client = getOpenAIClient();
-    const instructions =
-      options.instructions ?? buildDefaultTtsInstructions(text);
-    const response = await client.audio.speech.create({
-      model: DEFAULT_TTS_MODEL,
-      voice,
-      input: text,
-      response_format: "mp3",
-      instructions,
-    });
+    try {
+      const client = getOpenAIClient();
+      const instructions =
+        options.instructions ?? buildDefaultTtsInstructions(text);
+      console.log(`[TTS] Calling OpenAI with text: "${text}", model: ${DEFAULT_TTS_MODEL}, voice: ${voice}`);
+      
+      const startTime = Date.now();
+      const response = await client.audio.speech.create({
+        model: DEFAULT_TTS_MODEL,
+        voice,
+        input: text,
+        response_format: "mp3",
+        instructions,
+      });
+      console.log(`[TTS] OpenAI returned response in ${Date.now() - startTime}ms. Status: ${response.status}`);
 
-    const arrayBuffer = await response.arrayBuffer();
-    return new Uint8Array(arrayBuffer);
+      const arrayBuffer = await response.arrayBuffer();
+      console.log(`[TTS] Consumed arrayBuffer. Byte length: ${arrayBuffer.byteLength}`);
+      return new Uint8Array(arrayBuffer);
+    } catch (err) {
+      console.error(`[TTS] Error generating audio for text "${text}":`, err);
+      throw err;
+    }
   })();
 
   if (useCache) {

@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "tsx app/server.ts",
+    "dev": "tsx watch app/server.ts",
     "postinstall": "node scripts/fix-deepagents-anthropic-zod.mjs",
     "precompute:breakdowns": "tsx scripts/precomputeWordBreakdowns.ts",
     "precompute:concepts": "tsx scripts/precomputeConceptTeaching.ts",

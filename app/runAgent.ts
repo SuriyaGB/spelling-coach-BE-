@@ -301,7 +301,7 @@ export async function runSpellingCoachAgent(
     runtime === "deep_agent"
       ? options.agent ?? (await createSpellingCoachAgent({ model: options.model }))
       : options.directModel ??
-      (await createDirectSpellingCoachModel({ model: options.model }));
+        (await createDirectSpellingCoachModel({ model: options.model }));
   timings.push({
     stage: runtime === "deep_agent" ? "agent_setup" : "direct_model_setup",
     durationMs: nowMs() - agentStart,
@@ -372,16 +372,16 @@ export async function runSpellingCoachAgent(
     const response =
       runtime === "deep_agent"
         ? await agent.invoke(
-          { messages },
-          options.signal ? { signal: options.signal } : undefined,
-        )
+            { messages },
+            options.signal ? { signal: options.signal } : undefined,
+          )
         : await agent.invoke([
-          {
-            role: "system",
-            content: buildDirectRuntimeSystemPrompt(),
-          },
-          ...messages,
-        ], options.signal ? { signal: options.signal } : undefined);
+            {
+              role: "system",
+              content: buildDirectRuntimeSystemPrompt(),
+            },
+            ...messages,
+          ], options.signal ? { signal: options.signal } : undefined);
     timings.push({
       stage: `model_invoke_${attempt + 1}`,
       durationMs: nowMs() - invokeStart,
@@ -535,16 +535,16 @@ async function invokeLevelOneCoaching(
     const response =
       runtime === "deep_agent"
         ? await (agent as DeepAgentLike).invoke(
-          { messages },
-          signal ? { signal } : undefined,
-        )
+            { messages },
+            signal ? { signal } : undefined,
+          )
         : await (agent as DirectModelLike).invoke([
-          {
-            role: "system",
-            content: buildDirectRuntimeSystemPrompt(),
-          },
-          ...messages,
-        ], signal ? { signal } : undefined);
+            {
+              role: "system",
+              content: buildDirectRuntimeSystemPrompt(),
+            },
+            ...messages,
+          ], signal ? { signal } : undefined);
     timings.push({
       stage: `level1_model_invoke_${attempt + 1}`,
       durationMs: nowMs() - invokeStart,
@@ -565,8 +565,6 @@ async function invokeLevelOneCoaching(
         parseLevelOneCoachingOutput(parsedJson),
         precomputedWordBreakdown,
       );
-      normalizeMissAnalysisErrorTypes(input, validatedOutput);
-      sanitizeMissAnalysis(validatedOutput);
       timings.push({
         stage: `level1_output_validation_${attempt + 1}`,
         durationMs: nowMs() - outputValidationStart,

@@ -99,7 +99,7 @@ test("server maps authentication failures to HTTP 401", async () => {
   assert.equal(job.response.statusCode, 401);
 });
 
-test("server exposes catalog, voice, pronunciation, and validation routes", async () => {
+test("server exposes catalog, voice, and validation routes", async () => {
   const origins = await call("GET", "/api/foreign-origins");
   assert.equal(origins.response.statusCode, 200);
   assert.equal(Array.isArray(origins.json.origins), true);
@@ -118,8 +118,14 @@ test("server exposes catalog, voice, pronunciation, and validation routes", asyn
   const invalid = await call("POST", "/api/voice/interpret", undefined, {});
   assert.equal(invalid.response.statusCode, 400);
 
+  // Secure pronunciation route: requires a valid bearer token resolved via Supabase.
+  // No auth header is provided so authenticateRequest throws "Unauthorized: missing bearer token." → 401.
+  const secureAudio = await call("GET", "/api/words/pronunciation?challengeId=test-id&sessionId=test-session");
+  assert.equal(secureAudio.response.statusCode, 401);
+
+  // The legacy GET /api/words/:word/pronunciation route has been removed.
+  // It should now return 404.
   process.env.OPENAI_API_KEY = "mock-key";
-  const audio = await call("GET", "/api/words/unitword/pronunciation");
-  assert.equal(audio.response.statusCode, 200);
-  assert.equal(audio.response.headers["Content-Type"], "audio/mpeg");
+  const legacyAudio = await call("GET", "/api/words/unitword/pronunciation");
+  assert.equal(legacyAudio.response.statusCode, 404);
 });

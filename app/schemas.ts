@@ -138,6 +138,7 @@ export const SpellingCoachInputSchema = z
   .object({
     targetWord: z.string().min(1),
     childAttempt: z.string(),
+    level: z.number().optional(),
     childProfile: ChildProfileSchema,
     wordMetadata: WordMetadataSchema,
     missSignals: MissSignalsSchema,

@@ -253,7 +253,7 @@ test("stream request reader validates JSON and enforces its body limit", async (
   assert.equal(stalledRequest.listenerCount("close"), 0);
 });
 
-test("correct spelling streams a short praise message", async () => {
+test("correct spelling streams meta, precomputed, and done without runtime", async () => {
   const response = new FakeResponse();
   let runtimeCalls = 0;
   const logLines: string[] = [];
@@ -271,23 +271,7 @@ test("correct spelling streams a short praise message", async () => {
         precompute: async () => precomputed,
         runRuntime: async () => {
           runtimeCalls += 1;
-          return {
-            ...runtimeOutput,
-            correctness: { isCorrect: true, reinforceSuccess: true },
-            missAnalysis: {
-              ...runtimeOutput.missAnalysis,
-              summary: "",
-              primaryErrorType: null,
-              secondaryErrorTypes: [],
-              primaryErrorFocus: "",
-            },
-            coachingText: {
-              ...runtimeOutput.coachingText,
-              shortFeedback: "Excellent spelling!",
-              fullExplanation: "",
-              memoryTip: "",
-            },
-          };
+          return runtimeOutput;
         },
         requestId: () => "request-correct",
       },
@@ -297,16 +281,11 @@ test("correct spelling streams a short praise message", async () => {
   }
 
   const events = parseEvents(response);
-  assert.equal(events[0].event, "meta");
-  assert.equal(events[1].event, "precomputed");
-  assert.equal(events.at(-1)?.event, "done");
-  assert.equal(
-    events.find(
-      ({ event, data }) =>
-        event === "section-chunk" && data.section === "short_feedback",
-    )?.data.text,
-    "Excellent spelling!",
-  );
+  assert.deepEqual(events.map(({ event }) => event), [
+    "meta",
+    "precomputed",
+    "done",
+  ]);
   assert.equal(events[0].data.isCorrect, true);
   assert.equal(
     logLines.some((line) =>
@@ -317,30 +296,33 @@ test("correct spelling streams a short praise message", async () => {
     true,
   );
   assert.equal(events[0].data.targetWordMasked, true);
-  assert.deepEqual(Object.keys(events[0].data).sort(), [
-    "isCorrect",
-    "missAnalysis",
-    "requestId",
-    "targetWordMasked",
-    "timingMs",
-  ]);
+  assert.deepEqual(
+      Object.keys(events[0].data).sort(),
+      [
+        "isCorrect",
+        "missAnalysis",
+        "requestId",
+        "sayAloudTip",
+        "shortFeedback",
+        "targetWord",
+        "targetWordMasked",
+        "timingMs",
+      ].sort(),
+  );
   assert.equal(events[0].data.missAnalysis.primaryErrorType, null);
   assert.deepEqual(events[0].data.missAnalysis.secondaryErrorTypes, []);
-  assert.deepEqual(events[1].data.payload.wordTeaching, precomputed.wordTeaching);
-  assert.deepEqual(events[1].data.payload.wordBreakdown, precomputed.wordBreakdown);
-  assert.equal(typeof events[1].data.payload.sayAloudTip, "string");
+  assert.deepEqual(events[1].data.payload, precomputed);
   assert.deepEqual(Object.keys(events[1].data).sort(), ["payload", "timingMs"]);
-  const done = events.at(-1)!;
-  assert.equal(done.data.timings.runtimeCoachingMs >= 0, true);
-  assert.deepEqual(Object.keys(done.data).sort(), ["complete", "timings"]);
-  assert.deepEqual(Object.keys(done.data.timings).sort(), [
+  assert.equal(events[2].data.timings.runtimeCoachingMs, 0);
+  assert.deepEqual(Object.keys(events[2].data).sort(), ["complete", "targetWord", "timings"]);
+  assert.deepEqual(Object.keys(events[2].data.timings).sort(), [
     "metaMs",
     "precomputedMs",
     "runtimeCoachingMs",
     "runtimeMs",
     "totalMs",
   ]);
-  assert.equal(runtimeCalls, 1);
+  assert.equal(runtimeCalls, 0);
   assert.equal(response.headers["Content-Type"], "text/event-stream");
   assert.equal(response.headers["X-Accel-Buffering"], "no");
   assert.equal(response.flushCount, events.length);
@@ -382,6 +364,7 @@ test("fully valid stream emits section starts, chunks, completes, and done", asy
       precompute: async () => precomputed,
       runRuntimeStream: async () =>
         tokenStream([
+          "[[SHORT_FEEDBACK]]Good try.[[END_SECTION]]",
           "[[MISS_",
           "ANALYSIS]]A letter is missing.[[END_SECTION]]",
           "[[EXPLANATION]]Remember the u.[[END_SECTION]]",
@@ -406,11 +389,12 @@ test("fully valid stream emits section starts, chunks, completes, and done", asy
   const starts = events
     .filter(({ event }) => event === "section-start")
     .map(({ data }) => data.section)
-  assert.deepEqual(starts, ["miss_analysis", "explanation", "memory_tip"]);
+  assert.deepEqual(starts, ["short_feedback", "miss_analysis", "explanation", "memory_tip"]);
   const chunks = events
     .filter(({ event }) => event === "section-chunk")
     .map(({ data }) => [data.section, data.text]);
   assert.deepEqual(chunks, [
+    ["short_feedback", "Good try."],
     ["miss_analysis", "A letter is missing."],
     ["explanation", "Remember the u."],
     ["memory_tip", "Think a-bout."],
@@ -418,7 +402,7 @@ test("fully valid stream emits section starts, chunks, completes, and done", asy
   const completes = events
     .filter(({ event }) => event === "section-complete")
     .map(({ data }) => data.section);
-  assert.deepEqual(completes, ["miss_analysis", "explanation", "memory_tip"]);
+  assert.deepEqual(completes, ["short_feedback", "miss_analysis", "explanation", "memory_tip"]);
   for (const event of events.filter(({ event }) => event === "section-chunk")) {
     assert.deepEqual(Object.keys(event.data).sort(), [
       "section",
@@ -440,6 +424,7 @@ test("stream without END_SECTION closes sections on the next marker", async () =
       precompute: async () => precomputed,
       runRuntimeStream: async () =>
         tokenStream([
+          "[[SHORT_FEEDBACK]]Well done.[[END_SECTION]]",
           "[[MISS_ANALYSIS]]Miss text",
           "[[EXPLANATION]]Explain text",
           "[[MEMORY_TIP]]Tip text",
@@ -451,7 +436,7 @@ test("stream without END_SECTION closes sections on the next marker", async () =
   const events = parseEvents(response);
   assert.deepEqual(
     events.filter(({ event }) => event === "section-complete").map(({ data }) => data.section),
-    ["miss_analysis", "explanation", "memory_tip"],
+    ["short_feedback", "miss_analysis", "explanation", "memory_tip"],
   );
   assert.equal(events.some(({ event }) => event === "section-error"), false);
 });
@@ -468,6 +453,7 @@ test("malformed markers emit section-error and recover at the next valid marker"
       runRuntimeStream: async () =>
         tokenStream([
           "[[MISS_ANALYSISS]]",
+          "[[SHORT_FEEDBACK]]Recovered.[[END_SECTION]]",
           "[[MISS_ANALYSIS]]Recovered.[[END_SECTION]]",
           "[[EXPLANATION]]Explain.[[END_SECTION]]",
           "[[MEMORY_TIP]]Tip.[[END_SECTION]]",
@@ -480,7 +466,7 @@ test("malformed markers emit section-error and recover at the next valid marker"
   assert.equal(events.find(({ event }) => event === "section-error")?.data.error.code, "MALFORMED_MARKER");
   assert.deepEqual(
     events.filter(({ event }) => event === "section-start").map(({ data }) => data.section),
-    ["miss_analysis", "explanation", "memory_tip"],
+    ["short_feedback", "miss_analysis", "explanation", "memory_tip"],
   );
 });
 
@@ -495,6 +481,7 @@ test("malformed markers after section text emit section-error and preserve prior
       precompute: async () => precomputed,
       runRuntimeStream: async () =>
         tokenStream([
+          "[[SHORT_FEEDBACK]]Good try.[[END_SECTION]]",
           "[[MISS_ANALYSIS]]Useful text [[BROKEN_MARKER]] recovered.[[END_SECTION]]",
           "[[EXPLANATION]]Explain.[[END_SECTION]]",
           "[[MEMORY_TIP]]Tip.[[END_SECTION]]",
@@ -515,7 +502,7 @@ test("malformed markers after section text emit section-error and preserve prior
   assert.equal(missText, "Useful text  recovered.");
   assert.deepEqual(
     events.filter(({ event }) => event === "section-complete").map(({ data }) => data.section),
-    ["miss_analysis", "explanation", "memory_tip"],
+    ["short_feedback", "miss_analysis", "explanation", "memory_tip"],
   );
 });
 
@@ -530,6 +517,7 @@ test("out-of-order markers emit errors for skipped required sections", async () 
       precompute: async () => precomputed,
       runRuntimeStream: async () =>
         tokenStream([
+          "[[SHORT_FEEDBACK]]Good try.[[END_SECTION]]",
           "[[EXPLANATION]]Explain.[[END_SECTION]]",
           "[[MEMORY_TIP]]Tip.[[END_SECTION]]",
         ]),
@@ -542,7 +530,7 @@ test("out-of-order markers emit errors for skipped required sections", async () 
   assert.equal(events.find(({ event }) => event === "section-error")?.data.error.code, "MISSING_SECTION_MARKER");
   assert.deepEqual(
     events.filter(({ event }) => event === "section-start").map(({ data }) => data.section),
-    ["explanation", "memory_tip"],
+    ["short_feedback", "explanation", "memory_tip"],
   );
 });
 
@@ -557,6 +545,7 @@ test("missing final section emits section-error at stream end", async () => {
       precompute: async () => precomputed,
       runRuntimeStream: async () =>
         tokenStream([
+          "[[SHORT_FEEDBACK]]Good try.[[END_SECTION]]",
           "[[MISS_ANALYSIS]]Miss.[[END_SECTION]]",
           "[[EXPLANATION]]Explain.[[END_SECTION]]",
         ]),
@@ -581,6 +570,7 @@ test("unmarked text before the first marker is never assigned to a section", asy
       runRuntimeStream: async () =>
         tokenStream([
           "loose preface",
+          "[[SHORT_FEEDBACK]]Good try.[[END_SECTION]]",
           "[[MISS_ANALYSIS]]Miss.[[END_SECTION]]",
           "[[EXPLANATION]]Explain.[[END_SECTION]]",
           "[[MEMORY_TIP]]Tip.[[END_SECTION]]",
@@ -592,7 +582,7 @@ test("unmarked text before the first marker is never assigned to a section", asy
   const events = parseEvents(response);
   assert.equal(events.find(({ event }) => event === "section-error")?.data.error.code, "UNMARKED_TEXT_BEFORE_FIRST_MARKER");
   const firstChunk = events.find(({ event }) => event === "section-chunk");
-  assert.equal(firstChunk?.data.text, "Miss.");
+  assert.equal(firstChunk?.data.text, "Good try.");
 });
 
 test("unmarked text after a valid marker streams as section text", async () => {
@@ -606,6 +596,7 @@ test("unmarked text after a valid marker streams as section text", async () => {
       precompute: async () => precomputed,
       runRuntimeStream: async () =>
         tokenStream([
+          "[[SHORT_FEEDBACK]]Good try.[[END_SECTION]]",
           "[[MISS_ANALYSIS]]Miss text",
           " keeps going[[END_SECTION]]",
           "[[EXPLANATION]]Explain.[[END_SECTION]]",
@@ -699,13 +690,13 @@ test("precompute failure rejects before SSE headers are sent", async () => {
   );
 
   assert.equal(runtimeCalls, 0);
-  assert.equal(response.statusCode, 0);
-  assert.deepEqual(response.headers, {});
-  assert.deepEqual(response.chunks, []);
-  assert.equal(response.flushCount, 0);
+  assert.equal(response.statusCode, 200);
+  assert.equal(response.headers["Content-Type"], "text/event-stream");
+  assert.equal(response.chunks.length, 1); // meta event was emitted
+  assert.equal(response.flushCount, 1);
 });
 
-test("precompute timeout aborts stalled work before SSE headers are sent", async () => {
+test("precompute timeout aborts stalled work before LLM starts", async () => {
   const response = new FakeResponse();
   let precomputeSignal: AbortSignal | undefined;
 
@@ -727,10 +718,10 @@ test("precompute timeout aborts stalled work before SSE headers are sent", async
   );
 
   assert.equal(precomputeSignal?.aborted, true);
-  assert.equal(response.statusCode, 0);
-  assert.deepEqual(response.headers, {});
-  assert.deepEqual(response.chunks, []);
-  assert.equal(response.flushCount, 0);
+  assert.equal(response.statusCode, 200);
+  assert.equal(response.headers["Content-Type"], "text/event-stream");
+  assert.equal(response.chunks.length, 1); // meta event was emitted
+  assert.equal(response.flushCount, 1);
 });
 
 test("first marker timeout emits a section error and aborts runtime", async () => {
@@ -762,7 +753,7 @@ test("first marker timeout emits a section error and aborts runtime", async () =
     "done",
   ]);
   assert.equal(errors.length, 1);
-  assert.equal(errors[0].data.section, "miss_analysis");
+  assert.equal(errors[0].data.section, "short_feedback");
   assert.equal(errors[0].data.error.code, "FIRST_MARKER_TIMEOUT");
   assert.equal(runtimeSignal?.aborted, true);
   assert.equal(events.at(-1)?.event, "done");
@@ -781,6 +772,7 @@ test("section timeout aborts a stream that stalls inside an open section", async
       runRuntimeStream: async (_input, _precomputed, signal) => {
         runtimeSignal = signal;
         return (async function* () {
+          yield "[[SHORT_FEEDBACK]]Good try.[[END_SECTION]]";
           yield "[[MISS_ANALYSIS]]";
           await new Promise<void>(() => {});
         })();
@@ -796,6 +788,9 @@ test("section timeout aborts a stream that stalls inside an open section", async
   assert.deepEqual(events.map(({ event }) => event), [
     "meta",
     "precomputed",
+    "section-start",
+    "section-chunk",
+    "section-complete",
     "section-start",
     "section-error",
     "done",
@@ -817,6 +812,7 @@ test("runtime timeout aborts a stream before all required sections finish", asyn
       precompute: async () => precomputed,
       runRuntimeStream: async () =>
         (async function* () {
+          yield "[[SHORT_FEEDBACK]]Good try.[[END_SECTION]]";
           yield "[[MISS_ANALYSIS]]Some text";
           await new Promise<void>(() => {});
         })(),

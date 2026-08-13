@@ -4,6 +4,7 @@ import * as Sentry from "@sentry/node";
 
 import { createServer } from "node:http";
 import { URL } from "node:url";
+import { randomUUID } from "node:crypto";
 import { authenticateRequest } from "./auth.js";
 import {
   fetchCustomListsFromDB,
@@ -16,11 +17,12 @@ import {
   endPracticeSessionInDB,
   getUserStatisticsInDB,
   getSessionAttemptsFromDB,
-  getReportDataFromDB,
-  getReportSessionsPageFromDB,
   getPracticeSessionFromDB,
   getUserSubscriptionFromDB,
   updateUserSubscriptionInDB,
+  addChallengeToSession,
+  getChallengeFromSession,
+  peekChallengeInSession,
   type DBCustomList,
 } from "./supabase.js";
 import {
@@ -46,11 +48,6 @@ import {
 } from "./fileImportHandler.js";
 import { getConfiguredModelName } from "./modelConfig.js";
 import { isNewDeterministicPatternMatcherEnabled } from "./newPatternMatcher.js";
-import {
-  buildReportSection,
-  buildSessionWordDetails,
-  type ReportSection,
-} from "./reportBuilder.js";
 import { hasWordTeachingPrecompute, runSplitSpellingCoachAgent, warmWordTeachingPrecompute } from "./optimizedCoach.js";
 import { generatePronunciationAudio } from "./pronunciation.js";
 import { isNextStepEnabled, isRuntimeConceptTeachingEnabled } from "./prompt.js";
@@ -76,7 +73,6 @@ import {
   searchWords,
 } from "./wordCatalog.js";
 import { logError, logInfo } from "./logging.js";
-import { sendWeeklyEmailReports } from "./weeklyEmail.js";
 import {
   buildVoiceResponse,
   interpretVoiceUtterance,
@@ -136,38 +132,6 @@ async function getStandardWordsUsed(authToken: string, userId: string): Promise<
 
 function isStandardMode(mode: string): boolean {
   return mode === "standard" || mode.startsWith("standard_level_");
-}
-
-function reportRangeStart(range: string | null): string | undefined {
-  const daysByRange: Record<string, number> = { "7d": 7, "30d": 30, "90d": 90 };
-  const days = range ? daysByRange[range] : undefined;
-  if (!days) return undefined; // "all" (and omitted) means all available history.
-
-  const start = new Date();
-  start.setDate(start.getDate() - days);
-  return start.toISOString();
-}
-
-function reportFormatting(url: URL) {
-  const requestedLocale = url.searchParams.get("locale") || "en-US";
-  const requestedTimeZone = url.searchParams.get("timeZone") || "UTC";
-  let locale = "en-US";
-  let timeZone = "UTC";
-
-  try {
-    locale = new Intl.DateTimeFormat(requestedLocale).resolvedOptions().locale;
-  } catch {
-    // Keep the stable default for an invalid locale.
-  }
-  try {
-    timeZone = new Intl.DateTimeFormat("en-US", {
-      timeZone: requestedTimeZone,
-    }).resolvedOptions().timeZone;
-  } catch {
-    // Keep UTC for an invalid time-zone identifier.
-  }
-
-  return { locale, timeZone };
 }
 
 function sendUpgradeRequired(response: import("node:http").ServerResponse): void {
@@ -254,14 +218,6 @@ function isAuthError(error: unknown): boolean {
   );
 }
 
-function errorMessage(error: unknown): string {
-  if (error instanceof Error) return error.message;
-  if (error && typeof error === "object" && "message" in error && typeof error.message === "string") {
-    return error.message;
-  }
-  return "Unexpected server error.";
-}
-
 export default async function handler(
   request: import("node:http").IncomingMessage,
   response: import("node:http").ServerResponse,
@@ -285,17 +241,6 @@ export default async function handler(
   });
 
   try {
-    if (request.method === "GET" && url.pathname === "/api/cron/weekly-report") {
-      const secret = process.env.CRON_SECRET;
-      if (!secret || request.headers.authorization !== `Bearer ${secret}`) {
-        sendJson(response, 401, { error: "Unauthorized." });
-        return;
-      }
-      const result = await sendWeeklyEmailReports();
-      sendJson(response, result.failures.length ? 207 : 200, result);
-      return;
-    }
-
     if (request.method === "GET" && url.pathname === "/api/health") {
       const runtime =
         process.env.SPELLING_COACH_RUNTIME === "direct"
@@ -354,8 +299,11 @@ export default async function handler(
         foreignOrigin: url.searchParams.get("foreignOrigin") ?? undefined,
         exclude: url.searchParams.get("exclude") ?? undefined,
       });
+      const sessionId = url.searchParams.get("sessionId") ?? undefined;
       let customWordsFallback: any[] | undefined;
-      const user = query.customListId
+      // Always authenticate so we can store the challengeId in the session when sessionId is present.
+      // For custom lists, authentication was already required.
+      const user = (query.customListId || sessionId)
         ? await authenticateRequest(request)
         : undefined;
 
@@ -367,9 +315,23 @@ export default async function handler(
         }
       }
 
+      let excludeList = query.exclude || [];
+      if (sessionId && user) {
+        const authHeader = request.headers.authorization || "";
+        try {
+          const attempts = await getSessionAttemptsFromDB(authHeader, user.id, sessionId);
+          if (attempts && attempts.length > 0) {
+            const dbExclude = attempts.map((a: any) => a.target_word);
+            excludeList = [...new Set([...excludeList, ...dbExclude])];
+          }
+        } catch (err) {
+          logError("Failed to fetch session attempts for exclude logic:", err);
+        }
+      }
+
       const word = pickNextWord(
         query.level,
-        query.exclude,
+        excludeList,
         query.customListId,
         query.foreignOrigin,
         user?.id,
@@ -386,7 +348,28 @@ export default async function handler(
         .catch((error) => {
           logError("Word teaching precompute failed:", error);
         });
-      sendJson(response, 200, buildWordResponse(word));
+
+      // Generate a challengeId and store the word securely in the session.
+      // A sessionId is required for all authenticated practice.
+      if (!sessionId || !user) {
+        sendJson(response, 400, { error: "sessionId is required to fetch a word." });
+        return;
+      }
+
+      const authHeader = request.headers.authorization || "";
+      const challengeId = randomUUID();
+      try {
+        await addChallengeToSession(authHeader, user.id, sessionId, challengeId, word.word);
+      } catch (err) {
+        logError("Failed to store challengeId in session:", err);
+        sendJson(response, 500, { error: "Could not prepare word challenge. Please try again." });
+        return;
+      }
+
+      const wordResponse = buildWordResponse(word);
+      // The plain word field is intentionally omitted — challengeId is the only reference.
+      const { word: _omitted, ...wordMetadata } = wordResponse;
+      sendJson(response, 200, { ...wordMetadata, challengeId });
       return;
     }
 
@@ -419,7 +402,7 @@ export default async function handler(
       const encodedWord = parts[3];
       const tail = parts[4];
 
-      if (tail === "pronunciation" || encodedWord === "import-jobs") {
+      if (tail === "pronunciation" || encodedWord === "import-jobs" || encodedWord === "pronunciation") {
         // handled below
       } else if (encodedWord) {
         const word = decodeURIComponent(encodedWord);
@@ -629,128 +612,6 @@ export default async function handler(
       const authHeader = request.headers.authorization || "";
       const stats = await getUserStatisticsInDB(authHeader, user.id);
       sendJson(response, 200, { stats });
-      return;
-    }
-
-    if (request.method === "GET" && url.pathname === "/api/reports") {
-      const user = await authenticateRequest(request);
-      const authHeader = request.headers.authorization || "";
-      const range = url.searchParams.get("range") || "30d";
-      const section = (url.searchParams.get("section") || "overview") as ReportSection;
-      const sections: ReportSection[] = [
-        "overview",
-        "missAnalysis",
-        "wordKnowledge",
-        "supportUsage",
-        "sessions",
-        "mockBee",
-      ];
-
-      if (!["7d", "30d", "90d", "all"].includes(range)) {
-        sendJson(response, 400, { error: "range must be 7d, 30d, 90d, or all" });
-        return;
-      }
-      if (!sections.includes(section)) {
-        sendJson(response, 400, { error: `section must be one of: ${sections.join(", ")}` });
-        return;
-      }
-
-      const fromDate = reportRangeStart(range);
-      const requestedPage = Number.parseInt(url.searchParams.get("page") || "1", 10);
-      const requestedPageSize = Number.parseInt(url.searchParams.get("pageSize") || "10", 10);
-      const page = Number.isFinite(requestedPage) && requestedPage > 0 ? requestedPage : 1;
-      const pageSize = Number.isFinite(requestedPageSize)
-        ? Math.min(Math.max(requestedPageSize, 1), 50)
-        : 10;
-      const pagedReport = section === "sessions"
-        ? await getReportSessionsPageFromDB(
-          authHeader,
-          user.id,
-          fromDate,
-          page,
-          pageSize,
-        )
-        : null;
-      const report = pagedReport ?? await getReportDataFromDB(
-        authHeader,
-        user.id,
-        fromDate,
-        section === "wordKnowledge",
-      );
-      const sessionsById = new Map(report.sessions.map((session) => [session.id, session]));
-      const customListsById = new Map(
-        ("customLists" in report ? report.customLists : []).map((list) => [list.id, list]),
-      );
-      const attempts =
-        section === "wordKnowledge"
-          ? report.attempts.map((attempt) => {
-            const localWord = getWordByText(attempt.target_word);
-
-            let customWord;
-
-            if (!localWord) {
-              const session = sessionsById.get(attempt.session_id);
-              const customList = session?.custom_list_id
-                ? customListsById.get(session.custom_list_id)
-                : undefined;
-
-              customWord = Array.isArray(customList?.words)
-                ? customList.words.find(
-                  (word) =>
-                    word.word.toLowerCase() ===
-                    attempt.target_word.toLowerCase(),
-                )
-                : undefined;
-            }
-
-            const word = localWord ?? customWord;
-
-            return {
-              ...attempt,
-              word_catalog_entry: word
-                ? buildWordResponse(word)
-                : null,
-            };
-          })
-          : report.attempts;
-      const data = buildReportSection(
-        { sessions: report.sessions, attempts },
-        section,
-        reportFormatting(url),
-      );
-      sendJson(response, 200, pagedReport
-        ? {
-          ...data,
-          pagination: {
-            page,
-            pageSize,
-            total: pagedReport.total,
-            totalPages: Math.max(1, Math.ceil(pagedReport.total / pageSize)),
-          },
-        }
-        : data);
-      return;
-    }
-
-    if (
-      request.method === "GET"
-      && url.pathname === "/api/reports/session-details"
-    ) {
-      const user = await authenticateRequest(request);
-      const authHeader = request.headers.authorization || "";
-      const sessionId = url.searchParams.get("sessionId");
-      if (!sessionId) {
-        sendJson(response, 400, { error: "Missing sessionId query parameter" });
-        return;
-      }
-      const attempts = await getSessionAttemptsFromDB(
-        authHeader,
-        user.id,
-        sessionId,
-      );
-      sendJson(response, 200, {
-        words: buildSessionWordDetails(attempts),
-      });
       return;
     }
 
@@ -976,31 +837,31 @@ export default async function handler(
       return;
     }
 
+    // Secure pronunciation route: resolves word via challengeId without exposing it in the URL.
+    // This is the final route used after the frontend is fully migrated to challengeId.
+    // The legacy /api/words/:word/pronunciation route below is a temporary backward-compatibility path.
     if (
       request.method === "GET" &&
-      url.pathname.startsWith("/api/words/") &&
-      url.pathname.endsWith("/pronunciation")
+      url.pathname === "/api/words/pronunciation"
     ) {
-      const parts = url.pathname.split("/");
-      const encodedWord = parts[3];
-      const word = decodeURIComponent(encodedWord ?? "");
+      const challengeId = url.searchParams.get("challengeId");
+      const sessionId = url.searchParams.get("sessionId");
 
-      if (!word) {
-        sendJson(response, 400, { error: "Word is required." });
+      if (!challengeId || !sessionId) {
+        sendJson(response, 400, { error: "challengeId and sessionId are required." });
         return;
       }
 
-      const wordEntry = getWordByText(word);
-      if (!wordEntry) {
-        // If it is not in catalog, check if it's a valid alphabetic word to prevent arbitrary text abuse
-        if (!/^[a-zA-Z\s-]+$/.test(word)) {
-          sendJson(response, 404, { error: `Unknown word: ${word}` });
-          return;
-        }
-      }
-      const targetWordText = wordEntry ? wordEntry.word : word;
+      const user = await authenticateRequest(request);
+      const authHeader = request.headers.authorization || "";
+      const resolvedWord = await peekChallengeInSession(authHeader, user.id, sessionId, challengeId);
 
-      const audio = await generatePronunciationAudio(targetWordText);
+      if (!resolvedWord) {
+        sendJson(response, 400, { error: "Invalid or expired challengeId." });
+        return;
+      }
+
+      const audio = await generatePronunciationAudio(resolvedWord);
       sendAudio(response, 200, audio);
       return;
     }
@@ -1049,12 +910,28 @@ export default async function handler(
 
     if (request.method === "POST" && url.pathname === "/api/voice/respond") {
       const rawBody = await collectBody(request);
-      const requestBody = VoiceRespondRequestSchema.parse(JSON.parse(rawBody));
-      const result = await buildVoiceResponse(
-        requestBody.targetWord,
-        requestBody.utterance,
-        requestBody.includeAudio ?? true,
-      );
+      const parsed = JSON.parse(rawBody);
+
+      let targetWord: string;
+      if (parsed.challengeId && parsed.sessionId) {
+        // Secure path: resolve the word from the active session.
+        const user = await authenticateRequest(request);
+        const authHeader = request.headers.authorization || "";
+        const resolved = await peekChallengeInSession(authHeader, user.id, parsed.sessionId, parsed.challengeId);
+        if (!resolved) {
+          sendJson(response, 400, { error: "Invalid or expired challengeId." });
+          return;
+        }
+        targetWord = resolved;
+      } else {
+        // Legacy path: targetWord sent directly. Validate via existing schema.
+        const requestBody = VoiceRespondRequestSchema.parse(parsed);
+        targetWord = requestBody.targetWord;
+      }
+
+      const includeAudio = typeof parsed.includeAudio === "boolean" ? parsed.includeAudio : true;
+      const utterance = String(parsed.utterance ?? "");
+      const result = await buildVoiceResponse(targetWord, utterance, includeAudio);
       sendJson(response, 200, result);
       return;
     }
@@ -1109,6 +986,29 @@ export default async function handler(
           return;
         }
         throw error;
+      }
+
+      // If a challengeId was provided, resolve it to the targetWord via the session.
+      const parsedBody = requestBody as { challengeId?: string; sessionId?: string; targetWord?: string };
+      if (parsedBody.challengeId) {
+        if (!parsedBody.sessionId) {
+          sendJson(response, 400, { error: "sessionId is required when challengeId is provided." });
+          return;
+        }
+        const authHeader = request.headers.authorization || "";
+        const user = await authenticateRequest(request);
+        const resolvedWord = await getChallengeFromSession(
+          authHeader,
+          user.id,
+          parsedBody.sessionId,
+          parsedBody.challengeId,
+        );
+        if (!resolvedWord) {
+          sendJson(response, 400, { error: "Invalid or expired challengeId." });
+          return;
+        }
+        // Inject the resolved targetWord and strip challengeId before passing downstream.
+        requestBody = { ...parsedBody, targetWord: resolvedWord, challengeId: undefined };
       }
 
       try {
@@ -1529,7 +1429,9 @@ export default async function handler(
       return;
     }
 
-    sendJson(response, 400, { error: errorMessage(error) });
+    sendJson(response, 400, {
+      error: error instanceof Error ? error.message : String(error),
+    });
   }
 }
 

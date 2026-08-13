@@ -16,7 +16,6 @@ import {
   getMockBeeSessionFromDB,
   updateMockBeeSessionInDB,
   recordWordAttemptInDB,
-  updateWordAttemptCoachingResponseInDB,
 } from "./supabase.js";
 
 const MockBeeCreateRequestSchema = z
@@ -461,7 +460,6 @@ export class MockBeeService {
       customWordsFallback?: WordEntry[];
     },
   ): Promise<
-    | ReturnType<typeof buildSessionView>
     | {
         action: "active_session_conflict";
         activeSessionId: string;
@@ -664,7 +662,7 @@ export class MockBeeService {
     turn.status = "submitted";
     turn.answeredAt = new Date().toISOString();
     session.updatedAt = turn.answeredAt;
-    const attemptId = await recordWordAttemptInDB(
+    await recordWordAttemptInDB(
       authToken,
       userId,
       sessionId!,
@@ -681,7 +679,7 @@ export class MockBeeService {
       false,
     );
     this.advanceSession(session);
-    this.startReviewGeneration(authToken, userId, session, turn, attemptId);
+    this.startReviewGeneration(authToken, userId, session, turn);
 
     const isSessionCompleted = session.turns.every((entry) => entry.status !== "pending");
 
@@ -751,7 +749,7 @@ export class MockBeeService {
     turn.status = "timed_out";
     turn.answeredAt = new Date().toISOString();
     session.updatedAt = turn.answeredAt;
-    const attemptId = await recordWordAttemptInDB(
+    await recordWordAttemptInDB(
       authToken,
       userId!,
       sessionId,
@@ -768,7 +766,7 @@ export class MockBeeService {
       false,
     );
     this.advanceSession(session);
-    this.startReviewGeneration(authToken, userId!, session, turn, attemptId);
+    this.startReviewGeneration(authToken, userId!, session, turn);
 
     const isSessionCompleted = session.turns.every((entry) => entry.status !== "pending");
 
@@ -885,7 +883,6 @@ export class MockBeeService {
     userId: string,
     session: MockBeeSession,
     turn: MockBeeTurn,
-    attemptId: string,
   ): void {
     if (turn.reviewCardStatus === "pending" || turn.reviewCardStatus === "completed") {
       return;
@@ -907,13 +904,6 @@ export class MockBeeService {
         await updateMockBeeSessionInDB(authToken, userId, session.id, {
           session_state: buildMockBeeSessionState(session),
         });
-
-        await updateWordAttemptCoachingResponseInDB(
-          authToken,
-          userId,
-          attemptId,
-          JSON.stringify(reviewCard),
-        );
       })
       .catch(async (error) => {
         turn.reviewCardStatus = "failed";

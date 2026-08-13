@@ -42,13 +42,29 @@ export async function authenticateRequest(
   }
 
   const { url, publishableKey } = getSupabaseConfig();
-  const response = await fetch(`${url}/auth/v1/user`, {
-    method: "GET",
-    headers: {
-      apikey: publishableKey,
-      Authorization: `Bearer ${token}`,
-    },
-  });
+  
+  let response: Response | undefined;
+  let retries = 3;
+  while (retries > 0) {
+    try {
+      response = await fetch(`${url}/auth/v1/user`, {
+        method: "GET",
+        headers: {
+          apikey: publishableKey,
+          Authorization: `Bearer ${token}`,
+        },
+      });
+      break;
+    } catch (e: any) {
+      retries--;
+      if (retries === 0) throw e;
+      await new Promise(r => setTimeout(r, 1000));
+    }
+  }
+
+  if (!response) {
+    throw new Error("Fetch failed after retries.");
+  }
 
   if (!response.ok) {
     const errorBody = await response.text().catch(() => "Unknown error");

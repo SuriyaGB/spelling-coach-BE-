@@ -1,11 +1,5 @@
 {
   "version": 2,
-  "crons": [
-    {
-      "path": "/api/cron/weekly-report",
-      "schedule": "0 8 * * 1"
-    }
-  ],
   "rewrites": [
     {
       "source": "/api/:path*",
